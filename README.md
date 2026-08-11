@@ -75,7 +75,7 @@ f16: true
 gpu_layers: 99
 flash_attention: "true"     # required for quantized KV — and it runs on the GPU here (landmine 3)
 cache_type_k: q4_0
-cache_type_v: q4_0          # q4_0, never q8_0 — see 4.6
+cache_type_v: q4_0          # q4_0 is the best size/quality trade here — see 4.6
 ```
 
 Restart from the menu-bar icon and the model appears in `/v1/models`. Weights plus 16K of q4_0 cache sit comfortably inside the 4 GB card.
@@ -236,7 +236,7 @@ Everything else in this repo is setup detail. These are the findings.
 |---|---|---|---|
 | 1 | ~0.8 [tok/s](#g-toks), or a [GPU watchdog timeout](#g-watchdog) | Metal re-reads weights over PCIe on a discrete GPU | `-DGGML_METAL=OFF`, use Vulkan — **and pass the flag explicitly**, ggml auto-enables Metal on macOS even when the wrapper's own `SD_METAL=OFF`/`BUILD_TYPE=vulkan` says otherwise, and Metal then wins device 0 at runtime |
 | 2 | Gibberish tokens, or a runner that 500s on allocation | Two causes. The machine's [integrated GPU](#g-dgpu) advertises **32 GiB** of shared host RAM against the Radeon's real 4 GiB, so every "pick the biggest GPU" heuristic picks it. And **MoltenVK up to 1.4.1 reported `subgroupSize` 64 while Metal runs 32-wide SIMD groups on AMD**, so every subgroup reduction spanned the wrong lane count — the real root cause of this *and* landmine 4, and of upstream issue 15846 | [`GGML_VK_VISIBLE_DEVICES=0`](#g-visible-devices) to pin the Radeon, and **MoltenVK ≥ 1.4.2**, which corrects the subgroup size. The branches here gate their workarounds on `driverVersion >= 10402` and keep the safe path below it |
-| 3 | `-fa on` looks **~3.5× slower** for generation | Flash attention was **never running on the GPU**. `supports_op` rejects scalar FA unless subgroup shuffle+vote are available, and those are disabled on AMD Macs — so ggml silently scheduled every attention op on the **CPU**. `test-backend-ops support -o FLASH_ATTN_EXT` reported 0 of 5097 cases supported | Use the subgroup-free FA path (on these branches). Flash attention then runs on the GPU and becomes the **faster** option for decode: tg128 **10.2 → 40.4**. It is also what makes [quantized KV](#g-kv-quant) usable at all — `-ctk q4_0 -ctv q4_0` costs ~4% and takes the cache from 32 to 9 KiB/token. Use **q4_0, not q8_0**: q8_0 K/V still fails the op test on this driver (see [4.6](#46-benchmarks)) |
+| 3 | `-fa on` looks **~3.5× slower** for generation | Flash attention was **never running on the GPU**. `supports_op` rejects scalar FA unless subgroup shuffle+vote are available, and those are disabled on AMD Macs — so ggml silently scheduled every attention op on the **CPU**. `test-backend-ops support -o FLASH_ATTN_EXT` reported 0 of 5097 cases supported | Use the subgroup-free FA path (on these branches). Flash attention then runs on the GPU and becomes the **faster** option for decode: tg128 **10.2 → 40.4**. It is also what makes [quantized KV](#g-kv-quant) usable at all — `-ctk q4_0 -ctv q4_0` costs ~4% and takes the cache from 32 to 9 KiB/token. All three quantized KV precisions are correct on this branch; q8_0 needed [a further fix](#46-benchmarks) |
 | 4 | [Hybrid/state-space](#g-arch) models ([Mamba-2](#g-ssm), [Gated DeltaNet](#g-gdn)) emit token salad on GPU, coherent on CPU | `SSM_SCAN` and `GATED_DELTA_NET` drove shared-memory reductions from `gl_SubgroupInvocationID`, assuming a workgroup is one contiguous [subgroup](#g-subgroup). MoltenVK doesn't guarantee that → **[NaN](#g-nan)**. Same root cause as landmine 2: the driver's wrong subgroup size | Index by `gl_LocalInvocationID.x` instead (two shader files) — on the ggml and llama.cpp branches. The correct path also appeared faster than the broken one, though the two measurements predate the [regime controls](#59-a-warning-about-benchmarking-this-machine) below, so treat that as directional |
 | 5 | Diffusion output is full-frame colourful noise | The generic Vulkan [UNet](#g-unet) convolution ([im2col + matmul](#g-conv-direct)) is numerically broken on this RDNA1/MoltenVK stack. Not root-caused; it is a different defect from landmines 2–4 and it lives in a different vendored ggml ([leejet's](#63-what-was-modified)) | [`--diffusion-conv-direct`](#g-conv-direct) — one flag, and it's also **~3× faster** than the broken path |
 | 6 | Model "fits" but is unusably slow, or OOMs at the last step | 4 GB is the real constraint. For diffusion, **peak VRAM is at [VAE decode](#g-vae)**, not sampling | [Quantize](#g-quant) (`--type q8_0`), keep the VAE on CPU for SDXL, and check fit against **4278 MB** usable, not 4096 |
@@ -298,7 +298,8 @@ On the [ggml branch](https://github.com/maximosipov/ggml/tree/macbook-pro-2019-r
 - `vulkan: fix MoltenVK/Intel subgroup matmul correctness on RDNA1 and older Intel iGPUs` — upstream already disables the subgroup matmul path on Apple for AMD; this extends it to Intel. Purely defensive: it makes a mis-targeted integrated GPU produce correct results instead of silent garbage. The device is excluded here anyway (landmine 2) — the patch exists so that *if* something slips past the pin, it fails visibly rather than quietly.
 - `vulkan: fix NaN SSM_SCAN/GATED_DELTA_NET output on MoltenVK/RDNA1` (landmine 4).
 - `vulkan: disable subgroup clustered ops on MoltenVK (AMD/Intel)` — `quantize_q8_1` reduced 8-lane blocks with `subgroupClusteredMax`/`Add`, which MoltenVK does not map to the intended lanes, corrupting the activations both integer-dot matmul paths consume. Same family as the two above.
-- `vulkan: do not use mul_mat_vecq for q8_0 on MoltenVK` — the multi-column variant is wrong for q8_0 (n=2..9, err ≈ 1.0) while `n=1` and the `mul_mmq` path are correct. Root cause not found, and 1.4.2 does not fix it, so the guard is unconditional.
+- `vulkan: do not use mul_mat_vecq for q8_0 on MoltenVK` — the multi-column variant is wrong for q8_0 (n=2..9, err ≈ 1.0) while `n=1` and the `mul_mmq` path are correct. 1.4.2 does not fix it, so the guard is unconditional. Root cause since identified: `pack32(i16vec2(...))` from a 16-bit view, the same construct behind the flash-attention defect below.
+- `vulkan: keep q8_0 off the flash-attention MMQ path on MoltenVK` — the last correctness failure on this card, and one this branch caused itself by enabling integer dot ([4.6](#46-benchmarks)).
 
 **Performance:**
 - `vulkan: enable emulated integer dot for matmul on MoltenVK/AMD` — **+68% [prefill](#g-prefill)**, decode unchanged. See [12.2](#122-reading-the-ggml-capability-line) for why `int dot: 0` was never the whole story.
@@ -348,14 +349,23 @@ This backend's "benchmark" is a correctness table ([how it's run](#b-tbo)), whic
 | `GATED_DELTA_NET` (Vulkan0, AMD) | FAIL — ERR ≈ 1.0 | **OK, 36/36** |
 | `MUL_MAT` (Vulkan0, AMD) | OK | **OK, 982/982** — including the integer-dot path |
 | `MUL_MAT` (integrated GPU, excluded device) | **every case FAIL**, ERR 2.4–11.4 (tol 5e-4) | OK |
-| `FLASH_ATTN_EXT` (Vulkan0, AMD) | **0 of 5097 cases supported** — silently on the CPU | **4420 / 4757 pass**, 337 fail |
-| full sweep (Vulkan0) | — | **15089 / 15426 pass** — and all 337 failures are the `FLASH_ATTN_EXT` row above |
+| `FLASH_ATTN_EXT` (Vulkan0, AMD) | **0 of 5097 cases supported** — silently on the CPU | **4757 / 4757** |
+| full sweep (Vulkan0) | — | **15426 / 15426 — zero failures** |
 
-**Every remaining failure on this card is flash attention with `type_K=q8_0`**, at ERR 0.041–0.092 against a 5e-4 tolerance. Nothing else in a 15,426-case sweep fails: not one matmul, norm, RoPE, convolution or recurrent op. Every f16, q4_0, q4_1, q5_0/1 and iq4_nl attention case passes too.
+**The card now passes every case it runs.** It did not until recently: an earlier revision of this page recorded 337 failures, all of them flash attention with `type_K=q8_0` at ERR 0.041–0.092. That is worth keeping, because the cause turned out to be **self-inflicted and instructive**.
 
-So the practical rule is: **quantize the KV cache to q4_0, not q8_0.** The q8_0 KV path on this driver is not trustworthy. It is plausibly the same unresolved defect as the q8_0 `mul_mat_vecq` case the branch guards separately — both are q8_0-only, both survive MoltenVK 1.4.2 — but that link is a hypothesis, not a finding.
+q8_0 was correct everywhere *except* flash attention — `GET_ROWS`, `CPY`, `SET_ROWS`, `MUL_MAT`, `MUL_MAT_ID` and `MUL_MAT_VEC_FUSION` all passed it — so the signed 8-bit load was fine and only one loader was wrong. That loader is `k_block_to_shmem` in `flash_attn_mmq_funcs.glsl`, the **only** q8_0 path that repacks through `pack32(i16vec2(...))` from a 16-bit view; every other type packs from `u16vec2`. And it was only reachable because *this branch* enables integer dot and trusts 1.4.2 subgroups — `ggml_vk_fa_scalar_uses_mmq` requires both. Upstream, q8_0 KV took the dequantize path and was correct; the performance patch silently turned it **from correct-but-slower into fast-and-wrong**.
 
-(A further 3276 cases report `not supported` and are skipped rather than run, which is normal: they are ops or type combinations the Vulkan backend does not implement and hands to the CPU.)
+Routing q8_0 back to the dequantize path on MoltenVK restores it, at no cost to the other quantized KV types, which keep the faster MMQ path:
+
+| | before | after |
+|---|---|---|
+| `test-backend-ops -o FLASH_ATTN_EXT` | 4420 / 4757 | **4757 / 4757** |
+| full sweep | 15089 / 15426 | **15426 / 15426** |
+
+That also identifies the **same construct** behind the other q8_0 defect this branch carries — the multi-column `mul_mat_vecq` case — which was previously logged as "root cause not found". Both are `pack32(i16vec2(...))` under MoltenVK; both are handled by keeping q8_0 off the affected path.
+
+(A further ~3276 cases report `not supported` and are skipped rather than run, which is normal: they are ops or type combinations the Vulkan backend does not implement and hands to the CPU.)
 
 The one thing to know: a [shader](#g-shader) bug here shows up downstream as "this model is broken", three layers away. `test-backend-ops -b Vulkan0` before blaming a model.
 
@@ -466,12 +476,12 @@ Measured on Qwen3.5-4B — the number that decides your [context length](#g-ctx)
 | [KV precision](#g-kv-quant) | bytes/token | Max context with zero [CPU spill](#g-spill) | Numerically safe here? |
 |---|---|---|---|
 | f16 | 32.0 KiB | ~41K | ✅ |
-| q8_0 | 17.0 KiB | ~82K | ❌ **avoid** — 337 `FLASH_ATTN_EXT` cases fail at ERR 0.04–0.11 ([4.6](#46-benchmarks)) |
+| q8_0 | 17.0 KiB | ~82K | ✅ — but it failed 337 op-test cases until the [flash-attention MMQ fix](#46-benchmarks); check your build |
 | q4_0 | 9.0 KiB | **128K** | ✅ |
 
 Quantized KV requires [flash attention](#g-flash-attn). That used to be the catch, because FA fell back to the CPU (landmine 3) and cost ~3.5× on decode. With FA running on the GPU it costs about **4%** — `-ctk q4_0 -ctv q4_0` measures **36.7 tg128** against 38.1 for f16 — so the long-context choice is no longer a trade at all.
 
-**Skip the middle row.** q8_0 looks like the conservative compromise and is the one precision the op tester says is wrong on this driver. Go f16 or q4_0.
+**On q8_0:** it was the one precision the op tester rejected on this driver, and it is fixed on this branch rather than merely avoided — see [4.6](#46-benchmarks). If you are on an older build of these forks, or upstream with integer dot forced on, prefer f16 or q4_0.
 
 ### 5.8 Reproducing the benchmarks
 
@@ -1066,7 +1076,7 @@ Qwen3-4B-Instruct-2507 scores marginally higher on BFCL AST (0.875 vs 0.863) and
 **Configuration for unattended work**, all of it costing throughput you don't need:
 
 - **Serve, don't re-launch.** A resident [LocalAI](#8-localai) or `llama-server` process avoids paying model load per task, and keeps the GPU warm — which on this box makes it *faster*, not slower.
-- **Cap the context deliberately** and let the client truncate, rather than discovering the ceiling as a device loss mid-job. Size it from the [KV table](#57-kv-cache) with headroom, and use `-fa on -ctk q4_0 -ctv q4_0` if you need more context than f16 allows — that is now a ~4% cost rather than the 3.5× it used to be. **Do not reach for q8_0 KV**: it is the one precision that still fails the op tester here ([4.6](#46-benchmarks)).
+- **Cap the context deliberately** and let the client truncate, rather than discovering the ceiling as a device loss mid-job. Size it from the [KV table](#57-kv-cache) with headroom, and use `-fa on -ctk q4_0 -ctv q4_0` if you need more context than f16 allows — that is now a ~4% cost rather than the 3.5× it used to be. q8_0 KV is also correct on this branch now, though q4_0 remains the better trade for context length ([4.6](#46-benchmarks)).
 - **Supervise the process.** Device loss is unrecoverable in-process: the runtime must be restarted, so run it under `launchd`/a supervisor with a restart policy, and make the client retry idempotently.
 - **Don't stack GPU work back-to-back.** The one reproducible trigger for device loss here was continuous sweeps with no gap. Serialize jobs and leave the GPU a moment between them.
 - **Log the [`ioreg`](#g-ioreg) residency** alongside your job output. If a run silently falls back to CPU it will still produce correct answers, just ~3× slower, and you want that in the log rather than as a mystery.
@@ -1075,6 +1085,27 @@ Qwen3-4B-Instruct-2507 scores marginally higher on BFCL AST (0.875 vs 0.863) and
 
 ## 11. Negative results worth knowing
 
+Everything on this page that "doesn't work" is one of two things, and the distinction is the whole point of the section: a **silicon limit**, which you can only design around, or a **software limit**, which someone can fix. Sorting them took most of the effort behind this document, because on this stack they present identically — as wrong output, not as an error.
+
+| What fails | Which kind | Status |
+|---|---|---|
+| Metal on a discrete GPU: weights re-read over PCIe every token; watchdog kill for diffusion | **Silicon/architecture** — Metal assumes [unified memory](#g-uma) | Not fixable. Use Vulkan (landmine 1) |
+| bf16 weights → [NaN](#g-nan) | **Silicon** — `bf16: 0`, AMD added bf16 with CDNA1/RDNA3 | Not fixable. Use fp16 or a quantized GGUF |
+| `--diffusion-fa` / cooperative-matrix attention has no fast kernel | **Silicon** — `matrix cores: none`, WMMA arrives with RDNA3 | Not fixable. Leave it off |
+| A 4B model plus a large KV cache, or two resident models, exceeds VRAM | **Silicon** — 4 GB is 4 GB | Not fixable. Budget against **4278 MB** and load [one model per session](#one-model-per-session) |
+| Integrated GPU slower than the CPU at every size | **Silicon** | Not fixable. Pinned out (landmine 2) |
+| Gibberish on multi-GPU Macs | **Software** — ggml picked the device by reported VRAM; ollama passed a CPU-inclusive index | **Fixed** (device pin + `vulkan-visible-device-index`) |
+| `warp size: 64`, and every subgroup shader computing over the wrong lane count | **Software** — MoltenVK misreported Metal's 32-wide SIMD group | **Fixed upstream** in MoltenVK 1.4.2 |
+| `SSM_SCAN` / `GATED_DELTA_NET` → NaN on hybrid models | **Software** — shaders assumed a workgroup is one contiguous subgroup | **Fixed** on these branches |
+| `int dot: 0`, quantized matmul on a slow generic path | **Software ceiling** — Metal exposes no DP4a, but the emulation still wins | **Fixed**: +68% prefill |
+| Flash attention "3.5× slower" | **Software** — `FLASH_ATTN_EXT` was unsupported, so attention ran on the CPU | **Fixed**: now the faster option for decode |
+| q8_0 KV wrong under flash attention; q8_0 multi-column `mul_mat_vecq` wrong | **Software** — `pack32(i16vec2(...))` mistranslated by MoltenVK | **Fixed**: full sweep clean ([4.6](#46-benchmarks)) |
+| ollama's Vulkan runner fails to build on current headers | **Software** — missing `vk_video` in the fake SDK | **Fixed** ([7.4](#74-setup)) |
+| A model loaded second returns an empty completion | **Silicon cause, software symptom** — VRAM exhausted, reported as `finish_reason: stop` with zero tokens instead of an allocation error | **Open upstream.** Mitigation: one model per session |
+| LocalAI reports `GPU vendor=""` and `VRAM 0` on macOS | **Software** — its probe is Linux-oriented | **Open upstream.** Use [`ioreg`](#g-ioreg) instead ([8.6](#86-verifying-it-is-actually-on-the-gpu)) |
+| Diffusion im2col convolution → colourful noise | **Software**, not root-caused — and in a *different* vendored ggml ([leejet's](#63-what-was-modified)), so the fixes above do not apply | Worked around by `--diffusion-conv-direct`, which is also ~3× faster |
+| [`vk::DeviceLostError`](#g-device-lost) under hours of continuous load | Undetermined | Mitigation: leave the GPU a gap between jobs |
+
 - **[llama.cpp#20104](https://github.com/ggml-org/llama.cpp/issues/20104)** (Intel-Mac AMD Vulkan gibberish) **does not reproduce** on a current checkout: the correctness battery passes and GPU [perplexity](#g-ppl) matches CPU within 0.05%. The gibberish people hit on this hardware today is landmine 2 (wrong device selected) or landmine 4 (hybrid shaders), both fixed on these branches.
 - **The integrated GPU was evaluated once and permanently excluded.** Slower than the CPU at every size tested, and numerically wrong under MoltenVK before the matmul fix. It is pinned out in every recipe here; the fix on the ggml/llama.cpp branches exists to stop it being *silently wrong*, not to make it usable.
 - **Metal was measured, not assumed.** It is broken differently for LLMs (PCIe re-reads, ~0.8 tok/s) than for diffusion (watchdog timeout, no output at all).
@@ -1082,7 +1113,7 @@ Qwen3-4B-Instruct-2507 scores marginally higher on BFCL AST (0.875 vs 0.863) and
 - **The old flash-attention findings were all measuring a CPU fallback.** Every `-fa on` number in this project's history — the "2.3x penalty", the counterbalanced A/Bs, the claim that the effect reverses for state-space models — was taken while `FLASH_ATTN_EXT` was unsupported on Vulkan and running on the CPU. They are void. With FA on the GPU it is the faster option for decode.
 - **The Radeon can lose the device under sustained load.** The one reproducible trigger left is hours of back-to-back GPU work with no gap — during one such session even a plain baseline run died with [`vk::DeviceLostError`](#g-device-lost) with the patch reverted, and ~40 minutes of idle restored normal behaviour. It is machine state, not a correctness bug, but budget for it in any automated sweep. The *other* documented trigger no longer reproduces: Gemma-4-E4B ran out of VRAM at `pp512` with FA off, and now completes in both FA configurations (52.6 / 55.2 pp512).
 - **`int dot` and `warp size` in the capability banner do not tell you what the build is doing.** Both are printed from the driver's own report, before the branch's decisions are applied. `int dot: 0` shows on a build where the integer-dot path is live, and the only way to see the difference is prefill throughput. Read [12.2](#122-reading-the-ggml-capability-line) before drawing conclusions from that line.
-- **q8_0 remains the problem quantization on this driver**, in two independent places: the multi-column `mul_mat_vecq` path (guarded on these branches) and q8_0 KV under flash attention (337 failing op-test cases, ERR 0.04–0.11). Neither is root-caused. Whether they share a cause is an open question, not a finding.
+- **q8_0 was the problem quantization on this driver, and it is now root-caused.** Two failures that looked independent — the multi-column `mul_mat_vecq` path and q8_0 KV under flash attention — are the same defect: `pack32(i16vec2(...))` repacking from a 16-bit view, which MoltenVK mistranslates. Every other type packs from `u16vec2` and is fine. Both paths now route q8_0 elsewhere, and the full sweep passes. The lesson generalises: **a performance patch can convert a correct-but-slow path into a fast-and-wrong one**, and only a per-operator differential test catches it.
 
 ---
 
