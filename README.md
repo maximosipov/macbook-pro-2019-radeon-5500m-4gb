@@ -18,6 +18,118 @@ Three of the five needed source patches; those live on a `macbook-pro-2019-radeo
 | [stable-diffusion.cpp](https://github.com/maximosipov/stable-diffusion.cpp/tree/macbook-pro-2019-radeon-5500m-4gb) | text-to-image | no source changes needed — build/run flags + runbook |
 | [LocalAI](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb) | drop-in OpenAI API server + model gallery, text **and** images, packaged as a menu-bar app | no source changes needed — build/run flags + runbook |
 
+## Installing the LocalAI app, and pointing a coding agent at it
+
+The rest of this page is how the pieces were built and what they measure. This section is the shortest path from "nothing installed" to "an editor talking to my own GPU": install the menu-bar app, then point [OpenCode](https://opencode.ai) at it. Read [the expectations](#what-to-expect) at the end before you plan your day around it.
+
+### Install the menu-bar app
+
+There is no download — you build the bundle from the [LocalAI branch](#8-localai), which produces `LocalAI M.app` (367 MB) and `LocalAI-M.dmg` (142 MB). See [8.4](#84-setup) for the server and backends and [8.9](#89-a-menu-bar-app-and-a-dmg) for what the packaging step has to get right. Then:
+
+```bash
+open dist/LocalAI-M.dmg                                     # drag "LocalAI M.app" to /Applications
+xattr -dr com.apple.quarantine "/Applications/LocalAI M.app"
+open "/Applications/LocalAI M.app"
+```
+
+The `xattr` line is required, not optional: the bundle is **ad-hoc signed** (no Apple Developer identity was involved, so it is not notarized) and Gatekeeper blocks the first launch otherwise.
+
+It is an [`LSUIElement`](https://developer.apple.com/documentation/bundleresources/information-property-list/lsuielement) app — a menu-bar icon and **no Dock icon**. It owns the server process: starting it with the MoltenVK environment and the [device pin](#g-visible-devices) already set, polling `/readyz` to drive its status line, and shutting it down on Quit. The menu offers Open WebUI, Copy API Base URL, Open Models Folder, Show Log, Restart and Quit.
+
+| What | Where |
+|---|---|
+| API + WebUI | `http://127.0.0.1:8085` |
+| Models and their YAML configs | `~/Library/Application Support/LocalAI/models` |
+| Log | `~/Library/Application Support/LocalAI/logs/local-ai.log` |
+
+**Weights are deliberately not bundled** — they are gigabytes. On first run the app seeds the model YAMLs and, if a development checkout is present, symlinks the weights next to them. Otherwise put the GGUF in the models folder yourself; the YAML's `parameters.model` is resolved relative to that directory, and LocalAI rejects an absolute path outside it as an invalid file path, so a **symlink is the way to keep weights elsewhere**:
+
+```bash
+ln -s /path/to/granite-4.0-h-micro-Q4_K_M.gguf ~/Library/Application\ Support/LocalAI/models/
+```
+
+Check it came up, and that the model actually reached the Radeon rather than the CPU ([8.6](#86-verifying-it-is-actually-on-the-gpu) — LocalAI's own logs will not tell you):
+
+```bash
+curl -s http://127.0.0.1:8085/readyz -o /dev/null -w '%{http_code}\n'   # 200
+curl -s http://127.0.0.1:8085/v1/models | python3 -m json.tool
+ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
+```
+
+### Give it a model profile sized for an agent
+
+The default `context_size: 4096` in [8.5](#85-run) is fine for chat and **useless for a coding agent**: OpenCode's system prompt and tool schemas fill most of that before you have typed anything. Add a profile with a bigger window and [quantized KV](#g-kv-quant) to pay for it.
+
+**Use Granite-4.0-H-Micro here**, not the Qwen 4B that the rest of this page benchmarks — see [the failure note below](#what-to-expect). It is also the model that scored best on tool calling on this box, and its [Mamba-2](#g-ssm) recurrent state means the wider window costs almost no VRAM:
+
+```yaml
+# ~/Library/Application Support/LocalAI/models/granite-coder.yaml
+name: granite-coder
+backend: llama-cpp
+parameters:
+  model: granite-4.0-h-micro-Q4_K_M.gguf
+context_size: 16384
+f16: true
+gpu_layers: 99
+flash_attention: "true"     # required for quantized KV — and it runs on the GPU here (landmine 3)
+cache_type_k: q4_0
+cache_type_v: q4_0          # q4_0, never q8_0 — see 4.6
+```
+
+Restart from the menu-bar icon and the model appears in `/v1/models`. Weights plus 16K of q4_0 cache sit comfortably inside the 4 GB card.
+
+### Configure OpenCode
+
+OpenCode reaches any OpenAI-compatible endpoint through the AI SDK's `openai-compatible` provider. Add a `localai` block to `~/.config/opencode/opencode.json` (global) or `opencode.json` (per project); an existing `provider` map just gains another key:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "localai": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LocalAI (Radeon 5500M)",
+      "options": { "baseURL": "http://127.0.0.1:8085/v1" },
+      "models": {
+        "granite-coder": {
+          "name": "Granite-4.0-H-Micro (16K, q4_0 KV)",
+          "limit": { "context": 16384, "output": 4096 }
+        }
+      }
+    }
+  }
+}
+```
+
+The keys under `models` must match the `name:` in the model YAML — that is the id LocalAI publishes in `/v1/models`. No API key is needed; the endpoint is unauthenticated on loopback. `limit.context` is what stops OpenCode from packing a prompt the server will reject, so keep it equal to `context_size`.
+
+```bash
+opencode models | grep localai          # localai/granite-coder
+opencode run -m localai/granite-coder "Reply with exactly the word: ready"
+```
+
+In the TUI, `/models` switches provider mid-session; `opencode run -m provider/model` sets it for one-shot runs.
+
+<a name="what-to-expect"></a>
+### What to expect
+
+Measured on this machine, `opencode run` against `localai/granite-coder`:
+
+| Turn | Wall clock |
+|---|---|
+| First turn (cold — model load + full prefill of the agent prompt) | **~3 min** |
+| Warm turn, one-word answer | **10.1 s** |
+| Warm turn, a real question with a few sentences of answer | **13.8 s** / **23.6 s** |
+
+The shape of that is the whole story. **The first turn is expensive and the rest are not**, because the agent's system prompt and tool schemas — thousands of tokens — only have to be [prefilled](#g-prefill) once, and this card prefills at roughly 24–31 tok/s at long context ([5.5](#55-run)). Keep the server resident and the session alive and it is usable; restart it between every question and you pay three minutes each time.
+
+Two things to be honest about:
+
+- **Qwen3-4B-Instruct-2507 does not work here**, despite being the model the rest of this page benchmarks. Under OpenCode's tool-schema prompt at 16K context it spent ~7 minutes in prefill and then returned nothing, with the server logging `Backend returned empty response, retrying` five times and OpenCode hanging on the retries. Reproduced twice, and it is not a configuration error — the same model answers a plain chat request in under a second. Granite-4.0-H-Micro under the identical setup answers correctly. This is why the profile above uses Granite.
+- **It is a 3B-class model and it shows.** Asked for a one-liner counting lines across `.md` files it produced `grep -rl --include='*.md' '' . | wc -l` and described it as counting lines — that counts *files*. Asked what llama.cpp's `-ngl` flag does, it answered that it "disables the NVIDIA GPU library", which is the opposite of true. Both came back in under 25 seconds. It is fast enough to be pleasant and wrong often enough that you must read everything it hands you.
+
+One failure mode that looks alarming and isn't: an empty `content` with a non-empty `reasoning` is a [thinking model](#g-thinking) behaving normally over an OpenAI-compatible API, not MoltenVK corruption ([8.6](#86-verifying-it-is-actually-on-the-gpu)).
+
 ## Contents
 
 - **1.** [Why any of this is necessary](#1-why-any-of-this-is-necessary)
