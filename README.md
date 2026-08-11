@@ -60,7 +60,9 @@ ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
 
 The default `context_size: 4096` in [8.5](#85-run) is fine for chat and **useless for a coding agent**: OpenCode's system prompt and tool schemas fill most of that before you have typed anything. Add a profile with a bigger window and [quantized KV](#g-kv-quant) to pay for it.
 
-**Use Granite-4.0-H-Micro here**, not the Qwen 4B that the rest of this page benchmarks — see [the failure note below](#what-to-expect). It is also the model that scored best on tool calling on this box, and its [Mamba-2](#g-ssm) recurrent state means the wider window costs almost no VRAM:
+Either Qwen3-4B-Instruct-2507 or Granite-4.0-H-Micro works. **Granite is the better pick**: it scored best on tool calling on this box, and its [Mamba-2](#g-ssm) recurrent state means a wider window costs almost no VRAM. Whichever you choose, configure **only that one** — see [one model per session](#one-model-per-session).
+
+`context_size: 16384` is comfortably above the 11,132 tokens OpenCode's opening prompt needs, and leaves room for a conversation:
 
 ```yaml
 # ~/Library/Application Support/LocalAI/models/granite-coder.yaml
@@ -123,10 +125,36 @@ Measured on this machine, `opencode run` against `localai/granite-coder`:
 
 The shape of that is the whole story. **The first turn is expensive and the rest are not**, because the agent's system prompt and tool schemas — thousands of tokens — only have to be [prefilled](#g-prefill) once, and this card prefills at roughly 24–31 tok/s at long context ([5.5](#55-run)). Keep the server resident and the session alive and it is usable; restart it between every question and you pay three minutes each time.
 
-Two things to be honest about:
+Where the ~3 minutes goes is measurable, not mysterious. OpenCode's opening request carries **12 tool schemas — 38 KB of JSON** — and renders to **11,132 prompt tokens**, which the server reports itself:
 
-- **Qwen3-4B-Instruct-2507 does not work here**, despite being the model the rest of this page benchmarks. Under OpenCode's tool-schema prompt at 16K context it spent ~7 minutes in prefill and then returned nothing, with the server logging `Backend returned empty response, retrying` five times and OpenCode hanging on the retries. Reproduced twice, and it is not a configuration error — the same model answers a plain chat request in under a second. Granite-4.0-H-Micro under the identical setup answers correctly. This is why the profile above uses Granite.
-- **It is a 3B-class model and it shows.** Asked for a one-liner counting lines across `.md` files it produced `grep -rl --include='*.md' '' . | wc -l` and described it as counting lines — that counts *files*. Asked what llama.cpp's `-ngl` flag does, it answered that it "disables the NVIDIA GPU library", which is the opposite of true. Both came back in under 25 seconds. It is fast enough to be pleasant and wrong often enough that you must read everything it hands you.
+```bash
+# ask a 4096-context profile to process it and it tells you the size
+$ curl ... -d @opencode-request.json
+{"error":{"message":"request (11132 tokens) exceeds the available context size (4096 tokens), try increasing it"}}
+```
+
+11,132 tokens at ~25 tok/s is ~7 minutes of [prefill](#g-prefill), once. After that the prefix is cached and turns cost seconds.
+
+<a name="one-model-per-session"></a>
+**Load one model per server session.** This is the one rule that matters on a 4 GB card, and getting it wrong produces a failure with no error message:
+
+> A model loaded **after another model has been loaded in the same LocalAI session** returns an *empty completion* on a large prompt — `finish_reason: "stop"`, zero completion tokens, after paying the full prefill. LocalAI logs only `Backend returned empty response, retrying` five times; the client hangs on the retries and prints nothing.
+
+Reproduced four times, and it is none of the things it looks like. It is **not** context overflow (the same 11,132-token prompt succeeds at `context_size: 16384`), **not** streaming (the same request succeeds streamed), **not** the model (Qwen3-4B-2507 and Granite both do it, and both work when loaded first), and **not** a cancelled request left behind. The variable that predicts it is whether another model was loaded first: **3 of 3 clean sessions succeeded, 4 of 4 sessions with a prior model load failed.**
+
+The mechanism is a 4 GB card being asked for more than it has. Two resident models measure **3.47 GB** of the 4.28 GB usable *before* the 11K-token KV cache is allocated:
+
+```bash
+$ ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
+2295623680   # Granite alone
+3467935744   # Granite + Qwen both resident
+```
+
+So the *hardware* limit is real — 4 GB genuinely cannot hold two 4B-class models plus a large cache. The *software* defect is that nothing says so: the allocation shortfall surfaces as an empty completion rather than an out-of-memory error, which is what makes it cost hours instead of seconds. That is worth reporting upstream to LocalAI; `--max-active-backends=1` is not a fix (it evicts the previous model, but the eviction then races with the three requests OpenCode opens a session with, and you get `connection refused` instead).
+
+**What to actually do:** point OpenCode at one model and leave it there. If you change models, Quit and relaunch from the menu-bar icon first. A clean session is reliable; a mixed one is not.
+
+Finally, **it is a 3B-class model and it shows.** Asked for a one-liner counting lines across `.md` files it produced `grep -rl --include='*.md' '' . | wc -l` and described it as counting lines — that counts *files*. Asked what llama.cpp's `-ngl` flag does, it answered that it "disables the NVIDIA GPU library", which is the opposite of true. Both came back in under 25 seconds. It is fast enough to be pleasant and wrong often enough that you must read everything it hands you.
 
 One failure mode that looks alarming and isn't: an empty `content` with a non-empty `reasoning` is a [thinking model](#g-thinking) behaving normally over an OpenAI-compatible API, not MoltenVK corruption ([8.6](#86-verifying-it-is-actually-on-the-gpu)).
 
