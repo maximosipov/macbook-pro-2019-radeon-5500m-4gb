@@ -1,0 +1,20 @@
+[submodule "ggml"]
+	path = ggml
+	url = https://github.com/maximosipov/ggml.git
+	branch = macbook-pro-2019-radeon-5500m-4gb
+[submodule "llama.cpp"]
+	path = llama.cpp
+	url = https://github.com/maximosipov/llama.cpp.git
+	branch = macbook-pro-2019-radeon-5500m-4gb
+[submodule "LocalAI"]
+	path = LocalAI
+	url = https://github.com/maximosipov/LocalAI.git
+	branch = macbook-pro-2019-radeon-5500m-4gb
+[submodule "stable-diffusion.cpp"]
+	path = stable-diffusion.cpp
+	url = https://github.com/maximosipov/stable-diffusion.cpp.git
+	branch = macbook-pro-2019-radeon-5500m-4gb
+[submodule "ollama"]
+	path = ollama
+	url = https://github.com/maximosipov/ollama.git
+	branch = macbook-pro-2019-radeon-5500m-4gb
