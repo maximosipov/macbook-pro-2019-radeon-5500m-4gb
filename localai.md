@@ -125,6 +125,9 @@ Installing it: [quick start](README.md#quick-start-localai-and-opencode).
 
 ## Run
 
+Ready-made model configs for the recommended models are in [localai-models/](localai-models/) — copy them into
+your models folder instead of writing the YAML by hand.
+
 Register the Vulkan `grpc-server` as an external backend, wrapped in a script that carries the MoltenVK environment into the child process:
 
 ```bash

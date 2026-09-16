@@ -1,0 +1,31 @@
+# Qwen3.5-4B — the reasoning pick.
+#
+# Best maths and science scores measured here (MATH-500 0.81, GPQA-Diamond
+# 0.56), and 0.75 BFCL AST. It is the slowest of the four at 33.6 tok/s, and
+# its Gated DeltaNet prefill is a sequential scan, which is expensive through
+# MoltenVK — so long prompts cost more than the generation rate suggests.
+#
+# Fit: 3.05 GB weights + ~288 MB KV at 32K/q4_0, against 4278 MB usable.
+# This is the largest of the four: leave it alone in the session.
+
+name: qwen3.5-4b
+backend: llama-cpp
+description: Qwen3.5 4B (Gated DeltaNet hybrid, 32K context, q4_0 KV). Best maths and reasoning on this machine.
+
+parameters:
+  model: Qwen3.5-4B-Q4_K_M.gguf
+
+context_size: 32768
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0
+
+# A thinking model: content stays empty until the think block closes, and the
+# chain of thought arrives in message.reasoning. That is normal, not GPU
+# corruption. Thinking is slow on this card; uncomment to disable it, if the
+# chat template accepts the kwarg:
+# chat_template_kwargs:
+#   enable_thinking: false

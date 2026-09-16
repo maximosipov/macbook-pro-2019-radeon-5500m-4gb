@@ -1,0 +1,27 @@
+# Granite-4.0-H-Micro — the unattended / agent pick.
+#
+# Best tool-calling behaviour measured on this machine (24/24 on the custom set
+# including the negative cases, 0.86 BFCL AST). Its Mamba-2 hybrid design keeps
+# only 4 of 40 layers as attention, so the KV cache grows at ~8 KiB/token and a
+# wide context costs almost nothing in VRAM.
+#
+# Fit: 1.95 GB weights + ~288 MB KV at 32K/q4_0, against 4278 MB usable.
+# Speed: ~35 tok/s generation; served warm it measured 27.8 / 32.5 / 32.3 tok/s.
+# See models.md and localai.md in this repository.
+
+name: granite-4.0-h-micro
+backend: llama-cpp
+description: Granite 4.0 H-Micro (Mamba-2 hybrid, 32K context, q4_0 KV). Best tool calling on this machine.
+
+parameters:
+  model: granite-4.0-h-micro-Q4_K_M.gguf
+
+# 32K is far below this model's ceiling (~292K even at f16 KV) and leaves plenty
+# of room on a 4 GB card. An agent needs ~16K before the conversation starts.
+context_size: 32768
+
+gpu_layers: 99            # all layers on the Radeon; anything less pays a PCIe hop per token
+f16: true
+flash_attention: "true"   # runs on the GPU on these branches, and is required for a quantized KV cache
+cache_type_k: q4_0        # ~4% slower than f16, and 3.5x more context
+cache_type_v: q4_0

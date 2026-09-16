@@ -1,0 +1,24 @@
+# SDXL-Turbo — more photorealistic, and at the edge of this card.
+#
+# 3836 MB against 4278 MB usable, ~9.3 s/step. It fits only with the VAE on the
+# CPU: VRAM peaks during VAE decoding, not sampling, so a run can load happily
+# and still die at the last step. Moving the VAE also avoids SDXL's fp16 NaN.
+#
+# At 4 steps and cfg 1 it drops prompt details more often than SD-Turbo does,
+# so it is the "hero shot" model rather than the iteration model.
+
+name: sdxl-turbo
+backend: stablediffusion-ggml
+description: SDXL-Turbo at q8_0 with the VAE on the CPU. Most photorealistic option that fits in 4 GB.
+
+parameters:
+  model: sd_xl_turbo_1.0_fp16.safetensors
+
+step: 4
+cfg_scale: 1
+
+options:
+- "sampler:euler"
+- "diffusion_conv_direct:true"   # required: correctness, not tuning
+- "wtype:q8_0"
+- "keep_vae_on_cpu:true"         # required at this size: peak VRAM is VAE decode

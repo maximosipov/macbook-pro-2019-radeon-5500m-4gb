@@ -1,0 +1,27 @@
+# Qwen3-4B-Instruct-2507 — the tool-calling leader, for bounded context.
+#
+# Best BFCL AST score measured here (0.88) at 40.5 tok/s. The catch is its KV
+# cache: 144 KiB/token at f16, the heaviest in the set, so context is the
+# binding constraint rather than the weights. A q4_0 cache is what makes an
+# agent-sized window fit at all (~10K at f16 against ~35K at q4_0).
+#
+# Fit: 2.82 GB weights + ~648 MB KV at 16K/q4_0, against 4278 MB usable.
+# Served warm it measured 27.1 / 27.9 / 28.4 tok/s, the tightest numbers taken
+# on this machine.
+
+name: qwen3-4b-instruct-2507
+backend: llama-cpp
+description: Qwen3 4B Instruct 2507 (dense GQA, 16K context, q4_0 KV). Best tool calling, heaviest KV cache.
+
+parameters:
+  model: Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+
+# 16384 is comfortably above the ~11,132 tokens an agent's opening request
+# needs. Raising this much further will spill the KV cache to host RAM.
+context_size: 16384
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

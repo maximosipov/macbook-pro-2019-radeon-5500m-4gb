@@ -256,6 +256,7 @@ git submodule update --remote ggml     # move a submodule to its branch tip
 |---|---|
 | [ggml.md](ggml.md) · [llama.cpp.md](llama.cpp.md) · [stable-diffusion.cpp.md](stable-diffusion.cpp.md) · [ollama.md](ollama.md) · [localai.md](localai.md) | Tool guides: build, run, verify, performance and troubleshooting |
 | [models.md](models.md) | Model speed, VRAM and context ceilings, capability scores, and recommendations |
+| [localai-models/](localai-models/) | Ready-to-use LocalAI model YAML files for the recommended models |
 | [benchmarking.md](benchmarking.md) | How to measure this machine, and how each benchmark was run |
 | [hardware.md](hardware.md) | The ggml capability line, and AMD GPU generations |
 | [glossary.md](glossary.md) | Definitions of every term used, with references |

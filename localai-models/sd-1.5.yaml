@@ -1,0 +1,20 @@
+# SD 1.5 — the baseline, and the best LoRA / ControlNet ecosystem.
+#
+# 2035 MB resident at fp16, ~3.4 s/step, 20 steps at cfg 7 (about 88 s end to
+# end). Use it when you need the adapter ecosystem rather than speed.
+#
+# diffusion_conv_direct is MANDATORY here too: without it every image is noise.
+
+name: sd-1.5
+backend: stablediffusion-ggml
+description: Stable Diffusion 1.5 at fp16. Baseline quality, largest LoRA and ControlNet ecosystem.
+
+parameters:
+  model: v1-5-pruned-emaonly-fp16.safetensors
+
+step: 20
+cfg_scale: 7
+
+options:
+- "sampler:euler_a"
+- "diffusion_conv_direct:true"

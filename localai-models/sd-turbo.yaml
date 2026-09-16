@@ -1,0 +1,25 @@
+# SD-Turbo — the everyday image model.
+#
+# 2049 MB resident at q8_0, ~1.7 s/step, so a 4-step image is about 7 s of
+# compute (~44 s end to end over the API, including model load and on-the-fly
+# quantization). Keep the server resident to avoid paying that load repeatedly.
+#
+# diffusion_conv_direct is MANDATORY on this GPU. Without it the default
+# im2col convolution is numerically broken and every image comes out as
+# full-frame colourful noise. It is also about 3x faster than the broken path.
+# See README.md, "Images are colourful noise".
+
+name: sd-turbo
+backend: stablediffusion-ggml
+description: SD-Turbo at q8_0. Fast 4-step image generation, comfortable in 4 GB.
+
+parameters:
+  model: sd_turbo.safetensors
+
+step: 4          # turbo models are distilled for 1-4 steps
+cfg_scale: 1     # and want cfg ~1, not the ~7 a full SD model expects
+
+options:
+- "sampler:euler"
+- "diffusion_conv_direct:true"   # required: correctness, not tuning
+- "wtype:q8_0"                   # quantize on load; halves VRAM against fp16
