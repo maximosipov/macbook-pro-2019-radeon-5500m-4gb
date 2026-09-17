@@ -295,6 +295,31 @@ Both share one quirk worth testing before you rely on them: they follow a reques
 | SD 1.5 | fp16 | 2035 MB | ~3.4 | The [LoRA and ControlNet](glossary.md#g-lora) ecosystem, at 20 steps |
 | SDXL-Turbo | `--type q8_0 --vae-on-cpu` | 3836 MB | ~9.3 | Final images. Tight against the 4278 MB usable. |
 
-Measured [CLIP](glossary.md#g-clip) prompt adherence over six prompts is **tied**: SD-Turbo 33.84, SD 1.5 34.08, SDXL-Turbo 34.20 — within noise of each other, though individual prompts differ by up to 10 points. SD-Turbo is also 2x faster per image. The published images, per-prompt scores and command lines are in [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).
+Measured [CLIP](glossary.md#g-clip) prompt adherence over six prompts is **tied**: SD-Turbo 33.84,
+SD 1.5 34.08, SDXL-Turbo 34.20 — within noise of each other, though individual prompts differ by up to
+10 points. SD-Turbo is also 2× faster per image.
+
+### The same six prompts on all three models
+
+Fixed seed (42), 512×512, one run per model, so these are directly comparable. The number under each
+image is its [CLIP score](glossary.md#g-clip) — prompt adherence, higher is better; **bold** wins the row.
+
+| Prompt | SD-Turbo · 30–43 s | SD 1.5 · 73–77 s | SDXL-Turbo · 63–69 s |
+|---|---|---|---|
+| *astronaut riding a horse on the moon, detailed photograph* | <img src="images/t2i/sd-turbo-01.jpg" width="200" alt="SD-Turbo: astronaut riding a horse on the moon"><br>**40.56** | <img src="images/t2i/sd-1.5-01.jpg" width="200" alt="SD 1.5: astronaut riding a horse on the moon"><br>30.78 | <img src="images/t2i/sdxl-turbo-01.jpg" width="200" alt="SDXL-Turbo: astronaut riding a horse on the moon"><br>30.54 |
+| *a cozy bookstore cafe interior, warm light, rain on the window, cinematic* | <img src="images/t2i/sd-turbo-02.jpg" width="200" alt="SD-Turbo: a cozy bookstore cafe interior"><br>27.88 | <img src="images/t2i/sd-1.5-02.jpg" width="200" alt="SD 1.5: a cozy bookstore cafe interior"><br>**32.99** | <img src="images/t2i/sdxl-turbo-02.jpg" width="200" alt="SDXL-Turbo: a cozy bookstore cafe interior"><br>32.44 |
+| *close-up portrait of an elderly fisherman, weathered face, natural light* | <img src="images/t2i/sd-turbo-03.jpg" width="200" alt="SD-Turbo: close-up portrait of an elderly fisherman"><br>33.01 | <img src="images/t2i/sd-1.5-03.jpg" width="200" alt="SD 1.5: close-up portrait of an elderly fisherman"><br>**39.19** | <img src="images/t2i/sdxl-turbo-03.jpg" width="200" alt="SDXL-Turbo: close-up portrait of an elderly fisherman"><br>37.31 |
+| *a red fox sitting in a snowy forest at dawn, sharp focus* | <img src="images/t2i/sd-turbo-04.jpg" width="200" alt="SD-Turbo: a red fox in a snowy forest at dawn"><br>33.31 | <img src="images/t2i/sd-1.5-04.jpg" width="200" alt="SD 1.5: a red fox in a snowy forest at dawn"><br>31.81 | <img src="images/t2i/sdxl-turbo-04.jpg" width="200" alt="SDXL-Turbo: a red fox in a snowy forest at dawn"><br>**35.17** |
+| *a bowl of ramen with steam rising, food photography, top-down* | <img src="images/t2i/sd-turbo-05.jpg" width="200" alt="SD-Turbo: a bowl of ramen, top-down"><br>33.82 | <img src="images/t2i/sd-1.5-05.jpg" width="200" alt="SD 1.5: a bowl of ramen, top-down"><br>34.69 | <img src="images/t2i/sdxl-turbo-05.jpg" width="200" alt="SDXL-Turbo: a bowl of ramen, top-down"><br>**35.78** |
+| *a futuristic city skyline at sunset, flying cars, concept art* | <img src="images/t2i/sd-turbo-06.jpg" width="200" alt="SD-Turbo: a futuristic city skyline at sunset"><br>34.49 | <img src="images/t2i/sd-1.5-06.jpg" width="200" alt="SD 1.5: a futuristic city skyline at sunset"><br>**35.04** | <img src="images/t2i/sdxl-turbo-06.jpg" width="200" alt="SDXL-Turbo: a futuristic city skyline at sunset"><br>33.96 |
+| **mean** | 33.84 | 34.08 | **34.20** |
+
+**Look at the first row before trusting the means.** The prompt asks for an astronaut *riding a horse*;
+SD-Turbo draws the horse, SDXL-Turbo omits it and renders an astronaut standing on the moon. That single
+prompt is the largest gap in the set (40.56 against 30.54) and it is the "drops prompt detail at 4 steps
+and cfg 1" behaviour in action. Averaged over six prompts it disappears entirely.
+
+The per-prompt scores, the CLIP protocol and the command lines are in
+[stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).
 
 **Vision models** run through [ollama](ollama.md#performance): Qwen3-VL-4B holds about 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512`, against 8–15 tok/s and decaying at the upstream default of 1024.
