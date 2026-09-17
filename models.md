@@ -6,6 +6,7 @@ Which models fit, how fast they run, how much context they hold, and how capable
 - [Speed and fit](#speed-and-fit)
 - [Context ceilings](#context-ceilings)
 - [Capability scores](#capability-scores)
+- [Long-context retrieval](#long-context-retrieval)
 - [Choosing a model for unattended work](#choosing-a-model-for-unattended-work)
 - [Image models](#image-models)
 
@@ -21,8 +22,8 @@ The most prolific open-weight family, Apache-2.0 throughout, and the reference p
 
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
-| [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) | Aug 2025 | 4.0B | Dense, 36 layers, [GQA](glossary.md#g-arch) | 262K |
-| [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | Feb 2026 | 4.7B | [Gated DeltaNet](glossary.md#g-gdn) hybrid, 32 layers, multimodal | 262K |
+| [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) | Aug 2025 | 4.0B | Dense, 36 layers, [GQA](glossary.md#g-arch) | 256K |
+| [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | Feb 2026 | 4.7B | [Gated DeltaNet](glossary.md#g-gdn) hybrid, 32 layers, multimodal | 256K (extensible to ~1M) |
 
 **Qwen3-4B-Instruct-2507** is the non-thinking instruct refresh of Qwen3-4B, and the best tool caller measured here (0.88 BFCL). Its weakness on this hardware is memory shape rather than quality: a 144 KiB/token KV cache, the heaviest in the set, so context is what runs out first.
 
@@ -34,8 +35,8 @@ Gemma 4 (March 2026) spans E2B, E4B, 12B, 31B and a 26B-A4B mixture-of-experts; 
 
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
-| [Gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | Mar 2026 | 5.1B stored / ~2B effective | gemma4 [PLE](glossary.md#g-arch), 35 layers, multimodal | 131K |
-| [Gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) | Mar 2026 | 8.0B stored / ~4B effective | gemma4 PLE, 42 layers, multimodal | 131K |
+| [Gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | Mar 2026 | 5.1B stored / ~2B effective | gemma4 [PLE](glossary.md#g-arch), 35 layers, multimodal | 128K |
+| [Gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) | Mar 2026 | 8.0B stored / ~4B effective | gemma4 PLE, 42 layers, multimodal | 128K |
 
 The **E** stands for *effective* parameters, and it is the reason these models matter on a small card. Per-layer embeddings keep a large embedding table in host RAM while only the compute core occupies VRAM, so E2B stores 5.1B parameters but occupies **1.45 GB** of the GPU — less than models with half the parameter count. It also prefills faster than anything else here.
 
@@ -64,8 +65,8 @@ Enterprise-targeted, Apache-2.0, and the family that takes tool calling and inst
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
 | [Granite-4.0-H-Micro](https://huggingface.co/ibm-granite/granite-4.0-h-micro) | Sep 2025 | 3.2B | [Mamba-2](glossary.md#g-ssm) hybrid, 40 layers (only 4 attention) | 128K |
-| [Granite-4.1-3B](https://huggingface.co/ibm-granite/granite-4.1-3b) | Apr 2026 | 3.4B | Dense, 40 layers | 131K |
-| [Granite-4.2-3B](https://huggingface.co/ibm-granite/granite-4.2-3b) | Aug 2026 | 3.7B | Dense GQA, 40 layers | 131K |
+| [Granite-4.1-3B](https://huggingface.co/ibm-granite/granite-4.1-3b) | Apr 2026 | 3.4B | Dense, 40 layers | 128K |
+| [Granite-4.2-3B](https://huggingface.co/ibm-granite/granite-4.2-3b) | Aug 2026 | 3.7B | Dense GQA, 40 layers | 128K (512K with extension) |
 
 **Granite-4.0-H-Micro** is the one that matters on this card. Keeping just 4 of 40 layers as attention — the rest hold a fixed-size recurrent state — gives it a KV cache of 8 KiB/token, so its entire trained context fits in VRAM. Combined with the best tool-calling reliability measured here, that makes it the pick for unattended work.
 
@@ -75,9 +76,9 @@ The later dense 4.1 and 4.2 models are newer but not better on this hardware: th
 
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
-| [LFM2.5-2.6B](https://huggingface.co/LiquidAI/LFM2.5-2.6B) | Jul 2026 | 2.7B | [LFM2 short-convolution](glossary.md#g-lfm2) hybrid, 30 layers | 131K |
+| [LFM2.5-2.6B](https://huggingface.co/LiquidAI/LFM2.5-2.6B) | Jul 2026 | 2.7B | [LFM2 short-convolution](glossary.md#g-lfm2) hybrid, 30 layers | 128K |
 
-Liquid AI builds specifically for on-device inference, and it shows: this is the fastest decoder and the smallest resident model in the set, and it fits its whole 131K window without quantizing the cache. Most layers are gated short convolutions rather than attention.
+Liquid AI builds specifically for on-device inference, and it shows: this is the fastest decoder and the smallest resident model in the set, and it fits its whole 128K window without quantizing the cache. Most layers are gated short convolutions rather than attention.
 
 Note the license — **LFM Open License v1.0**, not Apache-2.0. It is the only model here with custom terms, so check them if the use is commercial.
 
@@ -87,7 +88,7 @@ Liquid AI also publishes [Pipette](glossary.md#g-pipette), the on-device benchma
 
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
-| [Phi-4-mini-instruct](https://huggingface.co/microsoft/Phi-4-mini-instruct) | Feb 2025 | 3.8B | Dense GQA, 32 layers | 131K |
+| [Phi-4-mini-instruct](https://huggingface.co/microsoft/Phi-4-mini-instruct) | Feb 2025 | 3.8B | Dense GQA, 32 layers | 128K |
 
 The oldest model in the set, MIT-licensed, and built on the Phi thesis that carefully curated training data beats scale. It holds up on maths and MMLU-Pro, but it is the tightest fit here at 3.04 GB, and on this stack it answers tool prompts in prose rather than emitting `tool_calls` — which rules it out of agent loops until that template gap is fixed.
 
@@ -95,7 +96,7 @@ The oldest model in the set, MIT-licensed, and built on the Phi thesis that care
 
 | Model | Released | Parameters | Architecture | Trained context |
 |---|---|---|---|---|
-| [SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B) | Jul 2025 | 3.1B | Dense, 36 layers | 65K |
+| [SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B) | Jul 2025 | 3.1B | Dense, 36 layers | 64K (128K with YaRN) |
 
 Hugging Face's own fully-open small model — weights, data recipe and training details all published, which makes it the most reproducible model here. It scores well on maths, but has the shortest context window of the set, the weakest instruction-following scores, and the same missing `tool_calls` problem as Phi-4-mini on this stack.
 
@@ -128,17 +129,25 @@ Every model here loads and runs correctly on the Vulkan build with no source cha
 
 | Model | [Architecture](glossary.md#g-arch) (attention layers) | KV f16 per token | Max context, f16 KV | Max context, q4_0 KV | Trained for |
 |---|---|---|---|---|---|
-| Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~131K (capped)** | ~131K (capped) | 128K |
-| LFM2.5-2.6B | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~131K (capped)** | ~131K (capped) | 131K |
-| Qwen3.5-4B | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | ~131K | 262K |
-| SmolLM3-3B | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | ~66K (capped) | 66K |
-| Granite-4.2-3B | dense GQA (40/40) | 80 KiB | ~27K | ~95K | 131K |
-| Phi-4-mini | dense GQA (32/32) | 128 KiB | ~14K | ~49K | 131K |
-| Qwen3-4B-2507 | dense GQA (36/36) | 144 KiB | ~10K | ~35K | 262K |
+| Gemma-4-E2B | gemma4 [iSWA](glossary.md#g-arch) (35 layers, 512-token window on most) | 7 KiB | **128K (capped, measured)** | 128K (capped, measured) | 128K |
+| Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~128K (capped)** | ~128K (capped) | 128K |
+| LFM2.5-2.6B | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~128K (capped)** | ~128K (capped) | 128K |
+| Gemma-4-E4B | gemma4 iSWA (42 layers) | 17 KiB | ~32K † | 128K (capped, measured) | 128K |
+| Qwen3.5-4B | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | ~128K | 256K |
+| SmolLM3-3B | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | ~64K (capped) | 64K |
+| Granite-4.2-3B | dense GQA (40/40) | 80 KiB | ~27K | ~95K | 128K |
+| Phi-4-mini | dense GQA (32/32) | 128 KiB | ~14K | ~49K | 128K |
+| Qwen3-4B-2507 | dense GQA (36/36) | 144 KiB | ~10K | ~35K | 256K |
 
 "Capped" means the model's *trained* context runs out before the VRAM does.
 
-The split is stark, and it's the practical payoff of hybrid architectures. Granite-4.0-H-Micro keeps only 4 of its 40 layers as attention — the rest hold a fixed-size recurrent state — so its cache grows at 8 KiB per token. On VRAM alone it would reach about 292K tokens at full f16 precision; in practice its 128K trained window runs out first, so the whole thing fits with room to spare. LFM2.5 fits its entire 131K trained window with no KV quantization at all. The dense models are VRAM-bound and modest: Qwen3-4B-2507 manages about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) is what lifts it to about 35K.
+The two Gemma rows are **measured**, not computed: their KV cost was read from [`ioreg`](glossary.md#g-ioreg) residency at 4K, 16K, 32K, 64K and 128K, because Gemma-4 uses interleaved sliding-window attention (`n_swa = 512`) and several layers hold no KV cache at all, so the per-layer arithmetic behind the other rows does not describe it. E2B holds its entire trained window in **2529 MB at f16** or 1962 MB at q4_0 — quantizing its cache is optional rather than necessary. E4B holds its full window at q4_0 (3822 MB).
+
+**†** E4B at f16 loads at 64K and 128K but reports *less* VRAM than at 32K (3210 and 3272 MB against 3690), which is the signature of weights spilling to host RAM rather than a cache that fits. Pending a loader-log confirmation, treat ~32K as its f16 ceiling and use q4_0 above that.
+
+Context windows follow each vendor's own wording, which is binary: **128K means 131,072 tokens**, 256K means 262,144, and 64K means 65,536. The measured ceilings in the other columns are decimal approximations of a computed token count, so a row can read "~128K (capped)" against a 128K trained window.
+
+The split is stark, and it's the practical payoff of hybrid architectures. Granite-4.0-H-Micro keeps only 4 of its 40 layers as attention — the rest hold a fixed-size recurrent state — so its cache grows at 8 KiB per token. On VRAM alone it would reach about 292K tokens at full f16 precision; in practice its 128K trained window runs out first, so the whole thing fits with room to spare. LFM2.5 fits its entire 128K trained window with no KV quantization at all. The dense models are VRAM-bound and modest: Qwen3-4B-2507 manages about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) is what lifts it to about 35K.
 
 ## Capability scores
 
@@ -182,7 +191,7 @@ Its GPQA score is also the most trustworthy in that column: it emitted a graded 
 
 **Coherence.** Every model scored here clears the [correctness battery](benchmarking.md#text-correctness-battery)'s repetition check (repetition ratio ≈ 0.01), including the hybrids and all three Gemma builds. Gemma-4-E4B passes the battery outright (4/4 plus coherence); the two E2B builds answer correctly but behind a `[Start thinking]` preamble that defeats the exact-match scorer, which is a harness artifact rather than a model failure. Scoring well on any of these benchmarks is itself proof that the output is coherent rather than [NaN](glossary.md#g-nan) garbage — a broken GPU path produces fluent loops, not 0.84 on tool calling.
 
-**Long context was not usable for the benchmarks.** [LongBench-v2](glossary.md#g-longbench) and [MRCR](glossary.md#g-mrcr) were run on three models and largely timed out at 12–19K tokens. That's a runtime wall on this card at long context, not a capability verdict.
+**Long context: see [the section below](#long-context-retrieval).** Earlier editions of this page reported these benchmarks as "largely timed out". That was a 400-second client limit, not the hardware. Given time, this card does long-context work — and one model does it perfectly.
 
 ᵃ Claude Opus 4.5 (FC), overall BFCL-V4 — [Gorilla leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html), 2026. Our column is the single-turn AST subset only.
 ᵇ Qwen3.7 Max, full MMLU-Pro — [llm-stats](https://llm-stats.com/benchmarks/mmlu-pro), 2026.
@@ -191,6 +200,46 @@ Its GPQA score is also the most trustworthy in that column: it emitted a graded 
 ᵍ Frontier tier, MATH-500 — near-saturated at about 0.98; no single canonical leaderboard.
 
 Leaderboards move. Re-check these before quoting them.
+
+## Long-context retrieval
+
+[LongBench-v2](glossary.md#g-longbench) (4-choice questions over ~12–13K-token documents, n=3) and
+[MRCR](glossary.md#g-mrcr) (reproduce one specific earlier message from a ~19K-token conversation, n=2),
+served at ctx 32768. **Time to response is reported alongside the score**, because on this card it is
+the binding constraint rather than an afterthought.
+
+| Model | [MRCR](glossary.md#g-mrcr) | MRCR s/item | [LongBench](glossary.md#g-longbench) | LB s/item | KV |
+|---|---|---|---|---|---|
+| **Gemma-4-E4B** | **1.000** | 476 | 0.000 | 293 | q4_0 |
+| Qwen3-4B-Instruct-2507 | 0.468 | 1263 | 0.000 | 376 | q4_0 |
+| Gemma-4-E2B | 0.113 | 287 | 0.000 ‡ | 166 | q4_0 |
+| Phi-4-mini | 0.103 | 536 | **0.333** | 291 | q4_0 |
+| SmolLM3-3B | 0.034 | 447 | 0.000 | 267 | q4_0 |
+| Granite-4.0-H-Micro | 0.014 | 231 | 0.000 ‡ | 142 | f16 |
+| Granite-4.2-3B | 0.000 | 462 | 0.000 | 299 | q4_0 |
+| LFM2.5-2.6B | 0.000 | 199 | 0.000 ‡ | 114 | f16 |
+| Qwen3.5-4B | 0.000 | 789 | 0.000 | 1032 | f16 |
+
+**Gemma-4-E4B reproduced both target messages verbatim**, prefix and all, from ~19K-token inputs — a
+perfect 1.000 at about 8 minutes per request. Nothing else comes close, and the model was not even in
+this page's shortlist until it was finally benchmarked.
+
+**Retrieval quality runs opposite to speed.** LFM2.5 answers a 19K-token MRCR item in 199 s and scores
+0.000; Qwen3-4B-2507 takes 1263 s and scores 0.468. On this hardware, long-context ability is bought
+with latency, so size the timeout to the model rather than assuming a hung request.
+
+**Qwen3.5-4B is the cautionary row.** It leads every short-prompt capability bench on this page and is
+the worst model here at long context: 0.000 on MRCR without even emitting the required prefix, and
+1032 s per LongBench item — 7× Granite-4.0-H-Micro — because its [Gated DeltaNet](glossary.md#g-gdn)
+prefill is a sequential scan that MoltenVK executes slowly. Short-prompt scores do not predict this.
+
+**LongBench at n=3 discriminates nothing.** Eight of nine models scored 0/3, the ninth 1/3. Treat the
+column as evidence the runs complete, not as a ranking; MRCR carries the signal at this sample size.
+
+**‡** These three ran before two protocol fixes landed and are pending a re-run. The fixes matter and
+are described in [benchmarking.md](benchmarking.md#long-context-benchmarks): an answer budget too small
+for a reasoning model to finish thinking in, and grading only `content` when reasoning models answer in
+`reasoning_content`.
 
 ## Choosing a model for unattended work
 
@@ -228,6 +277,6 @@ Both share one quirk worth testing before you rely on them: they follow a reques
 | SD 1.5 | fp16 | 2035 MB | ~3.4 | The [LoRA and ControlNet](glossary.md#g-lora) ecosystem, at 20 steps |
 | SDXL-Turbo | `--type q8_0 --vae-on-cpu` | 3836 MB | ~9.3 | Final images. Tight against the 4278 MB usable. |
 
-Details and command lines: [stable-diffusion.cpp.md](stable-diffusion.cpp.md#performance).
+Measured [CLIP](glossary.md#g-clip) prompt adherence over six prompts is **tied**: SD-Turbo 33.84, SD 1.5 34.08, SDXL-Turbo 34.20 — within noise of each other, though individual prompts differ by up to 10 points. SD-Turbo is also 2x faster per image. The published images, per-prompt scores and command lines are in [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).
 
 **Vision models** run through [ollama](ollama.md#performance): Qwen3-VL-4B holds about 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512`, against 8–15 tok/s and decaying at the upstream default of 1024.

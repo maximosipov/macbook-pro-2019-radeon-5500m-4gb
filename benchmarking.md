@@ -6,6 +6,7 @@ How to get numbers from this laptop that mean something, and how every measureme
 - [Correctness instruments](#correctness-instruments)
 - [Speed and fit instruments](#speed-and-fit-instruments)
 - [Capability benchmarks](#capability-benchmarks)
+- [Long-context benchmarks](#long-context-benchmarks)
 - [Superseded results](#superseded-results)
 
 ## Why this machine lies to you
@@ -86,6 +87,8 @@ A 128-token completion requested over the [OpenAI endpoint](glossary.md#g-openai
 
 ### VRAM residency and fit probes
 
+> **The loader accounting is hidden by default on current builds.** `llama-cli` and `llama-server` print a short banner instead of the per-buffer allocation log unless you pass `-v`. Any fit check that greps for a CPU buffer line will therefore see nothing and report a pass at every context size. Pass `-v`, or measure [`ioreg`](glossary.md#g-ioreg) residency instead.
+
 Three complementary checks:
 
 - the llama.cpp or sd.cpp **load log**, which reports per-buffer allocation and reveals [CPU spill](glossary.md#g-spill) as a CPU buffer appearing;
@@ -127,7 +130,36 @@ One convention applies throughout: a request that exceeds the **400 s client tim
 | **[LongBench-v2](glossary.md#g-longbench)** (n=3, ~12K tokens) | Four-choice questions over long documents. Only the smallest samples were used, so this is a reduced-context variant chosen so the card could prefill it at all. | Fraction correct, chance floor 0.25. |
 | **[MRCR](glossary.md#g-mrcr) v2** (n=2, ~19K tokens) | A long synthetic conversation contains several near-identical requests; the model must reproduce one specific earlier reply, with a required prefix. | Mean sequence-similarity ratio against the reference, 0–1, gated on the prefix being present. Not accuracy: partial credit is possible and a fluent wrong answer scores near 0. |
 
-**[CLIP score](glossary.md#g-clip) was not run.** It was the intended prompt-adherence metric for the image model comparison, and was skipped because the visual gap between the candidates was decisive without it. Noted so the absence isn't mistaken for a passing grade.
+### Long-context benchmarks
+
+LongBench-v2 and MRCR are run at ctx 32768 with the KV precision each model needs to fit, and **time to
+response is recorded per item** — on this card it ranges from 114 s to over 20 minutes, so it is a result
+in its own right rather than overhead.
+
+Three things had to be fixed before these benchmarks measured anything. Every earlier long-context number
+on this page is affected by at least one of them:
+
+- **The 400-second client timeout was shorter than the work.** A 19K-token MRCR item takes 200–1300 s here.
+  One item that the old limit recorded as `timeout` in fact scores **0.896** when allowed to finish. The
+  limits are now 1800 s (LongBench) and 2400 s (MRCR).
+- **The answer budget was 24 tokens.** A reasoning model spends that inside its think block and returns
+  empty content, scoring 0 by construction. Raised to 1024.
+- **Only `content` was graded.** Models served with `--reasoning-format deepseek` put their answer in
+  `reasoning_content` while `content` stays empty — the same root cause as the GPQA unparsed-rate caveat.
+  Both benchmarks now read either channel, and LongBench reports an explicit `unparsed` count so this
+  failure can never again be mistaken for a wrong answer.
+
+The lesson generalizes beyond this project: **a benchmark harness that reports a timeout or a zero is
+making a claim about itself as much as about the model.** Check the unparsed rate and the wall-clock
+distribution before believing either.
+
+### CLIP score (prompt adherence)
+
+Cosine similarity between CLIP's embedding of the prompt and of the generated image (`openai/clip-vit-base-patch32`, reported as 100 x cosine). Reference-free, so it needs no ground-truth image — it measures whether the image matches what was asked for, not whether it is attractive.
+
+**Score:** roughly 20-40 in practice; higher is better. Judge it per prompt rather than by the mean: across six prompts the three image models here land within 0.4 points of each other on average while differing by up to 10 points on individual prompts. It does detect a missing subject — SDXL-Turbo omitting the horse from "astronaut riding a horse" cost it 10 points against SD-Turbo. Results: [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).
+
+Earlier editions of this page listed CLIP score as "not run" on the grounds that the visual gap between the candidates was decisive without it. That turned out to be wrong in an interesting way: scored, the models are tied on adherence, and the assumed gap does not exist.
 
 ## Superseded results
 

@@ -129,6 +129,43 @@ Model fit and throughput:
 
 **Recommendation:** SD-Turbo at q8_0 for iterating, SDXL-Turbo at q8_0 with the VAE on the CPU for final images (clearly more photorealistic, about 5× slower per step, and at 4 steps it drops prompt details more often), and SD 1.5 when you need the [LoRA and ControlNet](glossary.md#g-lora) ecosystem.
 
+## Image quality
+
+Six prompts, one image each, at a fixed seed (42), 512x512, on all three models — the same run for
+every model, so the images are directly comparable. Prompt adherence is scored with
+[CLIP](glossary.md#g-clip) (`openai/clip-vit-base-patch32`, CLIPScore = 100 x cosine similarity);
+every image is published under [images/t2i/](images/t2i/).
+
+| Prompt | [SD-Turbo](images/t2i/) | [SD 1.5](images/t2i/) | [SDXL-Turbo](images/t2i/) |
+|---|---|---|---|
+| astronaut riding a horse on the moon | **40.56** [img](images/t2i/sd-turbo-01.jpg) | 30.78 [img](images/t2i/sd-1.5-01.jpg) | 30.54 [img](images/t2i/sdxl-turbo-01.jpg) |
+| a cozy bookstore cafe interior | 27.88 [img](images/t2i/sd-turbo-02.jpg) | **32.99** [img](images/t2i/sd-1.5-02.jpg) | 32.44 [img](images/t2i/sdxl-turbo-02.jpg) |
+| close-up portrait of an elderly fisherman | 33.01 [img](images/t2i/sd-turbo-03.jpg) | **39.19** [img](images/t2i/sd-1.5-03.jpg) | 37.31 [img](images/t2i/sdxl-turbo-03.jpg) |
+| a red fox in a snowy forest at dawn | 33.31 [img](images/t2i/sd-turbo-04.jpg) | 31.81 [img](images/t2i/sd-1.5-04.jpg) | **35.17** [img](images/t2i/sdxl-turbo-04.jpg) |
+| a bowl of ramen, top-down | 33.82 [img](images/t2i/sd-turbo-05.jpg) | 34.69 [img](images/t2i/sd-1.5-05.jpg) | **35.78** [img](images/t2i/sdxl-turbo-05.jpg) |
+| a futuristic city skyline at sunset | 34.49 [img](images/t2i/sd-turbo-06.jpg) | **35.04** [img](images/t2i/sd-1.5-06.jpg) | 33.96 [img](images/t2i/sdxl-turbo-06.jpg) |
+| **mean** | **33.84** | **34.08** | **34.20** |
+| **seconds per image** | **30–43** | 73–77 | 63–69 |
+
+**On prompt adherence the three models are tied.** The means sit within 0.4 points of each other, and
+each model wins different prompts: SD 1.5 takes three, SDXL-Turbo two, SD-Turbo one. There is no
+general quality ranking here to justify the slower models on adherence grounds.
+
+**Where they differ is per prompt, and sometimes dramatically.** The largest gap in the set is the
+astronaut: SD-Turbo scores 40.56 and SDXL-Turbo 30.54, because **SDXL-Turbo omits the horse entirely**
+and renders an astronaut standing on the moon. That is the "drops prompt detail at 4 steps and cfg 1"
+behaviour this page warns about, caught here with a matched pair — and CLIP scored it correctly, so the
+metric is doing real work rather than rewarding polish.
+
+**SD-Turbo is the better default than its reputation suggests.** It is 2x faster than the alternatives
+per image (30–43 s against 63–77 s), fits most comfortably in VRAM, and gives up nothing measurable in
+prompt adherence. Prefer SD 1.5 for portraits and interiors, where it scored highest, or when you need
+the [LoRA and ControlNet](glossary.md#g-lora) ecosystem; prefer SDXL-Turbo for texture-heavy natural
+subjects. Reach for none of them expecting a uniform quality upgrade.
+
+*The per-step figures in [Performance](#performance) are sampling only; the seconds here are end to end,
+including model load and on-the-fly quantization, which dominate a 4-step run.*
+
 ## Troubleshooting
 
 **Every image is colourful noise.** `--diffusion-conv-direct` is missing.

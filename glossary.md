@@ -67,7 +67,7 @@ Full protocols: [benchmarking.md](benchmarking.md).
 - <a name="g-longbench"></a>**LongBench-v2** — multiple-choice questions over long documents. ([dataset](https://huggingface.co/datasets/THUDM/LongBench-v2))
 - <a name="g-mrcr"></a>**MRCR** — Multi-Round Co-reference Resolution: retrieve one specific earlier message from a long synthetic conversation full of near-identical distractors. ([dataset](https://huggingface.co/datasets/openai/mrcr))
 - <a name="g-pipette"></a>**Pipette** — Liquid AI's open-source on-device benchmarking suite, measuring model × quantization × runtime × device performance on the device itself, with quality scored offline on reference GPUs. ([blog](https://www.liquid.ai/blog/pipette-on-device-ai-benchmarking-by-liquid-ai), [clients](https://github.com/Liquid4All/pipette-clients))
-- <a name="g-clip"></a>**CLIP score** — cosine similarity between CLIP's embedding of the prompt and of the generated image; a reference-free proxy for prompt adherence. Not run here. ([paper](https://arxiv.org/abs/2104.08718))
+- <a name="g-clip"></a>**CLIP score** — cosine similarity between CLIP's embedding of the prompt and of the generated image; a reference-free proxy for prompt adherence. Scored for the image models in [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality). ([paper](https://arxiv.org/abs/2104.08718))
 
 ## Diffusion
 
