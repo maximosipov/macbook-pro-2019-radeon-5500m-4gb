@@ -13,7 +13,7 @@ Which models fit, how fast they run, how much context they hold, and how capable
 
 ## At a glance
 
-Two views of the same measurements: where each model sits on the axes that decide a choice, and how every model scored on every benchmark.
+Three views of the same measurements, each answering a different question: **where** a model sits on the axes that decide a choice, **who wins** each benchmark, and **by how much**.
 
 ### Reasoning against retrieval
 
@@ -53,13 +53,21 @@ quadrantChart
 
 *The quadrant boundaries fall at reasoning 0.35 and MRCR 0.25. The retrieval axis is square-root scaled, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob.*
 
+### Ranking across every benchmark
+
+![Heatmap of capability scores: nine models by six benchmarks, shaded white to blue by rank within each benchmark](images/score-heatmap.png)
+
+*Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Rendered as an image because GitHub strips inline CSS from Markdown, so a genuinely coloured table cell does not survive there; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
+
+**Scan a row to judge a model, a column to judge a benchmark.** No row is blue throughout: Qwen3.5-4B is deepest on three columns and palest on MRCR, Gemma-4-E4B owns MRCR and MMLU-Pro while sitting bottom on MATH-500. The BFCL column is the flattest — seven of nine between 0.65 and 0.88 — so tool calling barely separates this class, while MRCR is the steepest.
+
 ### Every model on every benchmark
 
 ![Grouped bar chart: nine models across MATH-500, IFBench strict, MMLU-Pro, GPQA-Diamond, BFCL AST and MRCR, coloured by model with one hue family per maker](images/benchmarks.png)
 
 Bars are grouped by benchmark and coloured by model, with one hue family per maker — Alibaba blue, Google red, IBM green, Liquid AI purple, Microsoft amber, Hugging Face grey — so a vendor's models read together here exactly as they do in the tables.
 
-**Each benchmark ranks the models differently, which is the point.** MATH-500 puts Qwen3.5 first and Gemma-4-E4B last; MMLU-Pro reverses them. BFCL is the flattest column — seven of nine cluster between 0.65 and 0.88, so tool calling barely separates this class — while MRCR is the steepest, running from 1.00 to zero. A single "best small model" does not exist in this data.
+**Same data as the heatmap, read for magnitude rather than rank.** The bar heights show how far apart the scores actually are: the MRCR group is a cliff — one bar at 1.00, one at 0.47, and everything else near the floor — while IFBench is a low, flat row where even the winner reaches 0.26 against a frontier of about 0.83. A single "best small model" does not exist in this data.
 
 *Drawn with matplotlib rather than Mermaid: `xychart-beta` renders multiple bar series but has no legend, which a nine-model comparison needs. Regenerate with [`scripts/benchmark-chart.py`](scripts/benchmark-chart.py) after new measurements; the scores live at the top of that file.*
 
@@ -214,9 +222,7 @@ Measured over `llama-server`'s OpenAI endpoint at temperature 0, with thinking d
 
 > **These are relative rankings on this hardware under one protocol. They are not comparable to published leaderboard numbers** — the sample sizes are small, and the quantization, subset and prompt format all differ from published runs. Protocols are in [benchmarking.md](benchmarking.md#capability-benchmarks).
 
-![Heatmap of capability scores: nine models by six benchmarks, shaded white to blue by rank within each benchmark](images/score-heatmap.png)
-
-*The same numbers as the table below, shaded white-to-blue. Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Rendered as an image because GitHub strips inline CSS from Markdown, so a genuinely coloured table cell does not survive there; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
+The colour-coded view of this table is in [At a glance](#ranking-across-every-benchmark).
 
 | Model | Maker | [MATH-500](glossary.md#g-math500) | [IFBench](glossary.md#g-ifbench) strict / loose | [MMLU-Pro](glossary.md#g-mmlu) | [GPQA-D](glossary.md#g-gpqa) | [BFCL AST](glossary.md#g-bfcl) |
 |---|---|---|---|---|---|---|
