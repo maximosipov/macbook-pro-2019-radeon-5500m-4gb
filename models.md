@@ -13,7 +13,7 @@ Which models fit, how fast they run, how much context they hold, and how capable
 
 ## At a glance
 
-Three views of the same measurements, each answering a different question: **where** a model sits on the axes that decide a choice, **who wins** each benchmark, and **by how much**.
+Two views of the same measurements: **where** a model sits on the axes that decide a choice, and **who wins** each benchmark.
 
 ### Reasoning against retrieval
 
@@ -60,16 +60,6 @@ quadrantChart
 *Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Rendered as an image because GitHub strips inline CSS from Markdown, so a genuinely coloured table cell does not survive there; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
 
 **Scan a row to judge a model, a column to judge a benchmark.** No row is blue throughout: Qwen3.5-4B is deepest on three columns and palest on MRCR, Gemma-4-E4B owns MRCR and MMLU-Pro while sitting bottom on MATH-500. The BFCL column is the flattest — seven of nine between 0.65 and 0.88 — so tool calling barely separates this class, while MRCR is the steepest.
-
-### Every model on every benchmark
-
-![Grouped bar chart: nine models across MATH-500, IFBench strict, MMLU-Pro, GPQA-Diamond, BFCL AST and MRCR, coloured by model with one hue family per maker](images/benchmarks.png)
-
-Bars are grouped by benchmark and coloured by model, with one hue family per maker — Alibaba blue, Google red, IBM green, Liquid AI purple, Microsoft amber, Hugging Face grey — so a vendor's models read together here exactly as they do in the tables.
-
-**Same data as the heatmap, read for magnitude rather than rank.** The bar heights show how far apart the scores actually are: the MRCR group is a cliff — one bar at 1.00, one at 0.47, and everything else near the floor — while IFBench is a low, flat row where even the winner reaches 0.26 against a frontier of about 0.83. A single "best small model" does not exist in this data.
-
-*Drawn with matplotlib rather than Mermaid: `xychart-beta` renders multiple bar series but has no legend, which a nine-model comparison needs. Regenerate with [`scripts/benchmark-chart.py`](scripts/benchmark-chart.py) after new measurements; the scores live at the top of that file.*
 
 ## Who makes these models
 
