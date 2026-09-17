@@ -17,7 +17,7 @@ Two views of the same measurements: **where** a model sits on the axes that deci
 
 ### Reasoning against retrieval
 
-**Horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60), **vertical** is long-context retrieval (MRCR at ~19K tokens, 0.00 to 1.00), and the **number after each name is generation speed** in tokens per second.
+**Horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60), **vertical** is long-context retrieval (MRCR at ~19K tokens, 0.00 to 1.00). After each name: **generation speed** in tokens per second, then the **largest context that fits on this 4 GB card** — measured, with a q4_0 KV cache, from the [ceilings table](#context-ceilings). Several of those maxima are the model's trained limit rather than the card's.
 
 ```mermaid
 ---
@@ -29,27 +29,29 @@ config:
     titleFontSize: 18
 ---
 quadrantChart
-    title Reasoning vs retrieval (number = tok/s)
+    title Reasoning vs retrieval (tok/s · max context)
     x-axis "GPQA+MMLU mean 0.10" --> "0.60"
     y-axis "MRCR 0.00" --> "1.00"
     quadrant-1 Strong at both
     quadrant-2 Retrieves, reasons less
     quadrant-3 Weak at both
     quadrant-4 Reasons, cannot retrieve
-    Gemma-4-E4B 32: [0.83, 0.94]
-    Qwen3-4B-2507 41: [0.60, 0.68]
-    Gemma-4-E2B 53: [0.67, 0.34]
-    Phi-4-mini 42: [0.49, 0.30]
-    SmolLM3-3B 51: [0.38, 0.18]
-    Granite-4.0-H 35: [0.45, 0.11]
-    Granite-4.2 40: [0.31, 0.06]
-    LFM2.5 58: [0.14, 0.06]
-    Qwen3.5-4B 34: [0.82, 0.06]
+    Gemma-4-E4B 32 · 128K: [0.83, 0.94]
+    Qwen3-4B-2507 41 · 35K: [0.60, 0.68]
+    Gemma-4-E2B 53 · 128K: [0.67, 0.34]
+    Phi-4-mini 42 · 49K: [0.49, 0.30]
+    SmolLM3-3B 51 · 64K: [0.38, 0.18]
+    Granite-4.0-H 35 · 128K: [0.45, 0.11]
+    Granite-4.2 40 · 95K: [0.31, 0.06]
+    LFM2.5 58 · 128K: [0.14, 0.06]
+    Qwen3.5-4B 34 · 128K: [0.82, 0.06]
 ```
 
 **The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and 2 tok/s — and by the full height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. No capability leaderboard predicts that; it only appears if you measure long context directly.
 
 **Gemma-4-E4B is alone in the top-right**, and pays for it with speed: it is the slowest decoder in the set. **Gemma-4-E2B** is the pragmatic pick below it — 53 tok/s, the smallest footprint here (1.65 GB), and enough retrieval to be useful. **LFM2.5** sits in the bottom-left by design: the fastest model in the set, built for short high-volume work, and the wrong choice for anything that must remember a long conversation.
+
+**Context capacity cuts across the other two axes.** Five models hold their full 128K window on this card, and they sit in every quadrant — the ceiling is set by [KV geometry](#context-ceilings), not by how good the model is. The two that are genuinely constrained are Qwen3-4B-2507 (35K, the heaviest cache in the set at 144 KiB/token) and Phi-4-mini (49K); in both cases a q4_0 cache is what buys even that, since at f16 they manage about 10K and 14K.
 
 *The quadrant boundaries fall at reasoning 0.35 and MRCR 0.25. The retrieval axis is square-root scaled, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob.*
 
