@@ -131,10 +131,7 @@ Model fit and throughput:
 
 ## Image quality
 
-Six prompts, one image each, at a fixed seed (42), 512x512, on all three models — the same run for
-every model, so the images are directly comparable. Prompt adherence is scored with
-[CLIP](glossary.md#g-clip) (`openai/clip-vit-base-patch32`, CLIPScore = 100 x cosine similarity);
-every image is published under [images/t2i/](images/t2i/).
+Six prompts, one image each, at a fixed seed (42), 512x512, on all three models — the same run for every model, so the images are directly comparable. Prompt adherence is scored with [CLIP](glossary.md#g-clip) (`openai/clip-vit-base-patch32`, CLIPScore = 100 x cosine similarity); every image is published under [images/t2i/](images/t2i/).
 
 | Prompt | [SD-Turbo](images/t2i/) | [SD 1.5](images/t2i/) | [SDXL-Turbo](images/t2i/) |
 |---|---|---|---|
@@ -147,24 +144,13 @@ every image is published under [images/t2i/](images/t2i/).
 | **mean** | **33.84** | **34.08** | **34.20** |
 | **seconds per image** | **30–43** | 73–77 | 63–69 |
 
-**On prompt adherence the three models are tied.** The means sit within 0.4 points of each other, and
-each model wins different prompts: SD 1.5 takes three, SDXL-Turbo two, SD-Turbo one. There is no
-general quality ranking here to justify the slower models on adherence grounds.
+**On prompt adherence the three models are tied.** The means sit within 0.4 points of each other, and each model wins different prompts: SD 1.5 takes three, SDXL-Turbo two, SD-Turbo one. There is no general quality ranking here to justify the slower models on adherence grounds.
 
-**Where they differ is per prompt, and sometimes dramatically.** The largest gap in the set is the
-astronaut: SD-Turbo scores 40.56 and SDXL-Turbo 30.54, because **SDXL-Turbo omits the horse entirely**
-and renders an astronaut standing on the moon. That is the "drops prompt detail at 4 steps and cfg 1"
-behaviour this page warns about, caught here with a matched pair — and CLIP scored it correctly, so the
-metric is doing real work rather than rewarding polish.
+**Where they differ is per prompt, and sometimes dramatically.** The largest gap in the set is the astronaut: SD-Turbo scores 40.56 and SDXL-Turbo 30.54, because **SDXL-Turbo omits the horse entirely** and renders an astronaut standing on the moon. That is the "drops prompt detail at 4 steps and cfg 1" behaviour this page warns about, caught here with a matched pair — and CLIP scored it correctly, so the metric is doing real work rather than rewarding polish.
 
-**SD-Turbo is the better default than its reputation suggests.** It is 2x faster than the alternatives
-per image (30–43 s against 63–77 s), fits most comfortably in VRAM, and gives up nothing measurable in
-prompt adherence. Prefer SD 1.5 for portraits and interiors, where it scored highest, or when you need
-the [LoRA and ControlNet](glossary.md#g-lora) ecosystem; prefer SDXL-Turbo for texture-heavy natural
-subjects. Reach for none of them expecting a uniform quality upgrade.
+**SD-Turbo is the better default than its reputation suggests.** It is 2x faster than the alternatives per image (30–43 s against 63–77 s), fits most comfortably in VRAM, and gives up nothing measurable in prompt adherence. Prefer SD 1.5 for portraits and interiors, where it scored highest, or when you need the [LoRA and ControlNet](glossary.md#g-lora) ecosystem; prefer SDXL-Turbo for texture-heavy natural subjects. Reach for none of them expecting a uniform quality upgrade.
 
-*The per-step figures in [Performance](#performance) are sampling only; the seconds here are end to end,
-including model load and on-the-fly quantization, which dominate a 4-step run.*
+*The per-step figures in [Performance](#performance) are sampling only; the seconds here are end to end, including model load and on-the-fly quantization, which dominate a 4-step run.*
 
 ## Troubleshooting
 

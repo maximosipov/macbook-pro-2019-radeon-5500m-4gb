@@ -132,26 +132,15 @@ One convention applies throughout: a request that exceeds the **400 s client tim
 
 ### Long-context benchmarks
 
-LongBench-v2 and MRCR are run at ctx 32768 with the KV precision each model needs to fit, and **time to
-response is recorded per item** — on this card it ranges from 114 s to over 20 minutes, so it is a result
-in its own right rather than overhead.
+LongBench-v2 and MRCR are run at ctx 32768 with the KV precision each model needs to fit, and **time to response is recorded per item** — on this card it ranges from 114 s to over 20 minutes, so it is a result in its own right rather than overhead.
 
-Three things had to be fixed before these benchmarks measured anything. Every earlier long-context number
-on this page is affected by at least one of them:
+Three things had to be fixed before these benchmarks measured anything. Every earlier long-context number on this page is affected by at least one of them:
 
-- **The 400-second client timeout was shorter than the work.** A 19K-token MRCR item takes 200–1300 s here.
-  One item that the old limit recorded as `timeout` in fact scores **0.896** when allowed to finish. The
-  limits are now 1800 s (LongBench) and 2400 s (MRCR).
-- **The answer budget was 24 tokens.** A reasoning model spends that inside its think block and returns
-  empty content, scoring 0 by construction. Raised to 1024.
-- **Only `content` was graded.** Models served with `--reasoning-format deepseek` put their answer in
-  `reasoning_content` while `content` stays empty — the same root cause as the GPQA unparsed-rate caveat.
-  Both benchmarks now read either channel, and LongBench reports an explicit `unparsed` count so this
-  failure can never again be mistaken for a wrong answer.
+- **The 400-second client timeout was shorter than the work.** A 19K-token MRCR item takes 200–1300 s here. One item that the old limit recorded as `timeout` in fact scores **0.896** when allowed to finish. The limits are now 1800 s (LongBench) and 2400 s (MRCR).
+- **The answer budget was 24 tokens.** A reasoning model spends that inside its think block and returns empty content, scoring 0 by construction. Raised to 1024.
+- **Only `content` was graded.** Models served with `--reasoning-format deepseek` put their answer in `reasoning_content` while `content` stays empty — the same root cause as the GPQA unparsed-rate caveat. Both benchmarks now read either channel, and LongBench reports an explicit `unparsed` count so this failure can never again be mistaken for a wrong answer.
 
-The lesson generalizes beyond this project: **a benchmark harness that reports a timeout or a zero is
-making a claim about itself as much as about the model.** Check the unparsed rate and the wall-clock
-distribution before believing either.
+The lesson generalizes beyond this project: **a benchmark harness that reports a timeout or a zero is making a claim about itself as much as about the model.** Check the unparsed rate and the wall-clock distribution before believing either.
 
 ### CLIP score (prompt adherence)
 
