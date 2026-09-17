@@ -24,7 +24,9 @@ Four measurements per model, on one chart:
 | **Horizontal** | Knowledge and reasoning — mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60 |
 | **Vertical** | Long-context retrieval — MRCR at ~19K tokens, 0.00 to 1.00 |
 | **Dot size** | Generation speed — smallest dot 32 tok/s, largest 58 |
-| **Dot colour** | Largest context that fits on this card — pale blue 35K through deep navy 128K, also printed after each name |
+| **Dot colour** | Largest context that fits on this card — pale blue 35K through deep navy 128K |
+
+Each label repeats both as `(context, speed)`, so the chart can be read precisely and not only by eye.
 
 Context maxima are the measured q4_0 figures from the [ceilings table](#context-ceilings); several are the model's trained limit rather than the card's. Exact speeds are in the [speed table](#speed-and-fit).
 
@@ -32,9 +34,9 @@ Context maxima are the measured q4_0 figures from the [ceilings table](#context-
 ---
 config:
   quadrantChart:
-    chartWidth: 860
+    chartWidth: 1000
     chartHeight: 640
-    pointLabelFontSize: 11
+    pointLabelFontSize: 10
     titleFontSize: 18
   themeVariables:
     quadrant1Fill: "#ffffff"
@@ -57,15 +59,15 @@ quadrantChart
     quadrant-2 Retrieves, reasons less
     quadrant-3 Weak at both
     quadrant-4 Reasons, cannot retrieve
-    Gemma-4-E4B · 128K: [0.83, 0.94] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    Qwen3-4B-2507 · 35K: [0.60, 0.68] radius: 4, color: #9ecae1, stroke-color: #9ecae1, stroke-width: 1px
-    Gemma-4-E2B · 128K: [0.67, 0.34] radius: 6, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    Phi-4-mini · 49K: [0.49, 0.30] radius: 4, color: #6baed6, stroke-color: #6baed6, stroke-width: 1px
-    SmolLM3-3B · 64K: [0.38, 0.18] radius: 6, color: #4292c6, stroke-color: #4292c6, stroke-width: 1px
-    Granite-4.0-H · 128K: [0.45, 0.11] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    Granite-4.2 · 95K: [0.31, 0.06] radius: 4, color: #2171b5, stroke-color: #2171b5, stroke-width: 1px
-    LFM2.5 · 128K: [0.14, 0.06] radius: 7, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    Qwen3.5-4B · 128K: [0.82, 0.06] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Gemma-4-E4B (128K, 32 tok/s)": [0.83, 0.94] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Qwen3-4B-2507 (35K, 41 tok/s)": [0.60, 0.68] radius: 4, color: #9ecae1, stroke-color: #9ecae1, stroke-width: 1px
+    "Gemma-4-E2B (128K, 53 tok/s)": [0.67, 0.34] radius: 6, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Phi-4-mini (49K, 42 tok/s)": [0.49, 0.30] radius: 4, color: #6baed6, stroke-color: #6baed6, stroke-width: 1px
+    "SmolLM3-3B (64K, 51 tok/s)": [0.38, 0.18] radius: 6, color: #4292c6, stroke-color: #4292c6, stroke-width: 1px
+    "Granite-4.0-H (128K, 35 tok/s)": [0.45, 0.11] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Granite-4.2 (95K, 40 tok/s)": [0.31, 0.06] radius: 4, color: #2171b5, stroke-color: #2171b5, stroke-width: 1px
+    "LFM2.5 (128K, 58 tok/s)": [0.14, 0.06] radius: 7, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Qwen3.5-4B (128K, 34 tok/s)": [0.82, 0.06] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
 ```
 
 **The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and 2 tok/s — and by the full height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. No capability leaderboard predicts that; it only appears if you measure long context directly.
