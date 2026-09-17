@@ -13,33 +13,55 @@ Which models fit, how fast they run, how much context they hold, and how capable
 
 ## At a glance
 
-Every text model on one chart, on the three axes that decide a choice here: **horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro), **vertical** is long-context retrieval (MRCR at ~19K tokens), and the **number after each name is generation speed** in tokens per second.
+Two views of the same measurements: where each model sits on the axes that decide a choice, and how every model scored on every benchmark.
+
+### Reasoning against retrieval
+
+**Horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60), **vertical** is long-context retrieval (MRCR at ~19K tokens, 0.00 to 1.00), and the **number after each name is generation speed** in tokens per second.
 
 ```mermaid
+---
+config:
+  quadrantChart:
+    chartWidth: 820
+    chartHeight: 620
+    pointLabelFontSize: 11
+    titleFontSize: 18
+---
 quadrantChart
-    title Reasoning vs long-context retrieval (number = tok/s)
-    x-axis Weaker reasoning --> Stronger reasoning
-    y-axis Cannot retrieve --> Retrieves reliably
+    title Reasoning vs retrieval (number = tok/s)
+    x-axis "GPQA+MMLU mean 0.10" --> "0.60"
+    y-axis "MRCR 0.00" --> "1.00"
     quadrant-1 Strong at both
     quadrant-2 Retrieves, reasons less
     quadrant-3 Weak at both
     quadrant-4 Reasons, cannot retrieve
-    Gemma-4-E4B 32: [0.90, 0.88]
-    Qwen3-4B-2507 41: [0.63, 0.64]
-    Gemma-4-E2B 53: [0.71, 0.38]
-    Phi-4-mini 42: [0.50, 0.36]
-    SmolLM3-3B 51: [0.36, 0.26]
-    Granite-4.0-H 35: [0.45, 0.21]
-    Granite-4.2 40: [0.28, 0.12]
-    LFM2.5 58: [0.10, 0.12]
-    Qwen3.5-4B 34: [0.89, 0.12]
+    Gemma-4-E4B 32: [0.83, 0.94]
+    Qwen3-4B-2507 41: [0.60, 0.68]
+    Gemma-4-E2B 53: [0.67, 0.34]
+    Phi-4-mini 42: [0.49, 0.30]
+    SmolLM3-3B 51: [0.38, 0.18]
+    Granite-4.0-H 35: [0.45, 0.11]
+    Granite-4.2 40: [0.31, 0.06]
+    LFM2.5 58: [0.14, 0.06]
+    Qwen3.5-4B 34: [0.82, 0.06]
 ```
 
-**The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and by 2 tok/s — and by the entire height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. Nothing in a capability leaderboard predicts that; it only appears if you measure long context directly.
+**The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and 2 tok/s — and by the full height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. No capability leaderboard predicts that; it only appears if you measure long context directly.
 
-**Gemma-4-E4B is alone in the top-right**, and it pays for that with speed: it is the slowest decoder in the set. **Gemma-4-E2B** is the pragmatic pick just below it — 53 tok/s, the smallest footprint here (1.65 GB), and enough retrieval to be useful. **LFM2.5** sits in the bottom-left corner by design: the fastest model in the set, built for short high-volume work, and the wrong choice for anything that has to remember a long conversation.
+**Gemma-4-E4B is alone in the top-right**, and pays for it with speed: it is the slowest decoder in the set. **Gemma-4-E2B** is the pragmatic pick below it — 53 tok/s, the smallest footprint here (1.65 GB), and enough retrieval to be useful. **LFM2.5** sits in the bottom-left by design: the fastest model in the set, built for short high-volume work, and the wrong choice for anything that must remember a long conversation.
 
-*Both axes are normalised, so read positions as ranking rather than magnitude; the absolute numbers are in the tables below. The retrieval axis uses a square-root scale, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob. Chart is a [Mermaid](https://mermaid.js.org/syntax/quadrantChart.html) `quadrantChart`, which GitHub renders natively.*
+*The quadrant boundaries fall at reasoning 0.35 and MRCR 0.25. The retrieval axis is square-root scaled, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob.*
+
+### Every model on every benchmark
+
+![Grouped bar chart: nine models across MATH-500, IFBench strict, MMLU-Pro, GPQA-Diamond, BFCL AST and MRCR, coloured by model with one hue family per maker](images/benchmarks.png)
+
+Bars are grouped by benchmark and coloured by model, with one hue family per maker — Alibaba blue, Google red, IBM green, Liquid AI purple, Microsoft amber, Hugging Face grey — so a vendor's models read together here exactly as they do in the tables.
+
+**Each benchmark ranks the models differently, which is the point.** MATH-500 puts Qwen3.5 first and Gemma-4-E4B last; MMLU-Pro reverses them. BFCL is the flattest column — seven of nine cluster between 0.65 and 0.88, so tool calling barely separates this class — while MRCR is the steepest, running from 1.00 to zero. A single "best small model" does not exist in this data.
+
+*Drawn with matplotlib rather than Mermaid: `xychart-beta` renders multiple bar series but has no legend, which a nine-model comparison needs. Regenerate with [`scripts/benchmark-chart.py`](scripts/benchmark-chart.py) after new measurements; the scores live at the top of that file.*
 
 ## Who makes these models
 
