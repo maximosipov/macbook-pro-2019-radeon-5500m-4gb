@@ -129,10 +129,10 @@ Every model here loads and runs correctly on the Vulkan build with no source cha
 
 | Model | [Architecture](glossary.md#g-arch) (attention layers) | KV f16 per token | Max context, f16 KV | Max context, q4_0 KV | Trained for |
 |---|---|---|---|---|---|
-| Gemma-4-E2B | gemma4 [iSWA](glossary.md#g-arch) (35 layers, 512-token window on most) | 7 KiB | **128K (capped, measured)** | 128K (capped, measured) | 128K |
+| Gemma-4-E2B | gemma4 [iSWA](glossary.md#g-arch) (35 layers, 512-token window on most) | 6 KiB | **128K (capped, measured)** | 128K (capped, measured) | 128K |
 | Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~128K (capped)** | ~128K (capped) | 128K |
 | LFM2.5-2.6B | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~128K (capped)** | ~128K (capped) | 128K |
-| Gemma-4-E4B | gemma4 iSWA (42 layers) | 17 KiB | ~32K † | 128K (capped, measured) | 128K |
+| Gemma-4-E4B | gemma4 iSWA (42 layers) | 16 KiB | **64K (measured)** † | 128K (capped, measured) | 128K |
 | Qwen3.5-4B | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | ~128K | 256K |
 | SmolLM3-3B | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | ~64K (capped) | 64K |
 | Granite-4.2-3B | dense GQA (40/40) | 80 KiB | ~27K | ~95K | 128K |
@@ -141,13 +141,30 @@ Every model here loads and runs correctly on the Vulkan build with no source cha
 
 "Capped" means the model's *trained* context runs out before the VRAM does.
 
-The two Gemma rows are **measured**, not computed: their KV cost was read from [`ioreg`](glossary.md#g-ioreg) residency at 4K, 16K, 32K, 64K and 128K, because Gemma-4 uses interleaved sliding-window attention (`n_swa = 512`) and several layers hold no KV cache at all, so the per-layer arithmetic behind the other rows does not describe it. E2B holds its entire trained window in **2529 MB at f16** or 1962 MB at q4_0 — quantizing its cache is optional rather than necessary. E4B holds its full window at q4_0 (3822 MB).
+The two Gemma rows are **measured**, not computed: Gemma-4 uses interleaved sliding-window attention
+(`n_swa = 512`) and several layers hold no KV cache at all, so the per-layer arithmetic behind the other
+rows does not describe it. The figures come from llama.cpp's own loader accounting (`-v`), at ctx 32K and 128K:
 
-**†** E4B at f16 loads at 64K and 128K but reports *less* VRAM than at 32K (3210 and 3272 MB against 3690), which is the signature of weights spilling to host RAM rather than a cache that fits. Pending a loader-log confirmation, treat ~32K as its f16 ceiling and use q4_0 above that.
+| | GPU weights | KV at 32K | KV at 128K | GPU total at 128K | Host-RAM embeddings |
+|---|---|---|---|---|---|
+| Gemma-4-E2B | 1408 MiB | 204 MiB | 780 MiB | **2188 MiB — fits** | 1756 MiB |
+| Gemma-4-E4B | 2884 MiB | 552 MiB | 2088 MiB | 4972 MiB — over budget | 2208 MiB |
 
-Context windows follow each vendor's own wording, which is binary: **128K means 131,072 tokens**, 256K means 262,144, and 64K means 65,536. The measured ceilings in the other columns are decimal approximations of a computed token count, so a row can read "~128K (capped)" against a 128K trained window.
+**E2B holds its entire trained window at f16** with room to spare, so quantizing its cache is optional.
+**E4B fits 64K at f16** (2884 + 1064 = 3948 MiB) but not 128K; use q4_0 above that, where its whole
+window fits in about 3572 MiB.
 
-The split is stark, and it's the practical payoff of hybrid architectures. Granite-4.0-H-Micro keeps only 4 of its 40 layers as attention — the rest hold a fixed-size recurrent state — so its cache grows at 8 KiB per token. On VRAM alone it would reach about 292K tokens at full f16 precision; in practice its 128K trained window runs out first, so the whole thing fits with room to spare. LFM2.5 fits its entire 128K trained window with no KV quantization at all. The dense models are VRAM-bound and modest: Qwen3-4B-2507 manages about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) is what lifts it to about 35K.
+**† Two traps live in this measurement**, both worth knowing before you repeat it:
+
+- **A large CPU weight buffer is normal for these models, not a spill.** Both hold a
+  [per-layer embedding table](glossary.md#g-arch) in host RAM by design — 1756 MiB for E2B, 2208 MiB for
+  E4B — and it stays exactly the same size as context grows. That is what makes an "E2B" fit a 4 GB card,
+  and it also means the VRAM column understates these models' total memory footprint. A spill shows up as
+  a CPU buffer that *grows* with context.
+- **[`ioreg`](glossary.md#g-ioreg) undercounts reserved cache.** At 128K it reported *less* memory in use
+  than at 32K, because a one-token warm-up never touches most of the allocation, and at the largest sizes
+  the driver commits beyond physical VRAM. Residency is the right tool for "is this model on the GPU";
+  the loader log is the right tool for "does this context fit".
 
 ## Capability scores
 
@@ -212,12 +229,12 @@ the binding constraint rather than an afterthought.
 |---|---|---|---|---|---|
 | **Gemma-4-E4B** | **1.000** | 476 | 0.000 | 293 | q4_0 |
 | Qwen3-4B-Instruct-2507 | 0.468 | 1263 | 0.000 | 376 | q4_0 |
-| Gemma-4-E2B | 0.113 | 287 | 0.000 ‡ | 166 | q4_0 |
+| Gemma-4-E2B | 0.113 | 287 | 0.000 | 168 | q4_0 |
 | Phi-4-mini | 0.103 | 536 | **0.333** | 291 | q4_0 |
 | SmolLM3-3B | 0.034 | 447 | 0.000 | 267 | q4_0 |
-| Granite-4.0-H-Micro | 0.014 | 231 | 0.000 ‡ | 142 | f16 |
+| Granite-4.0-H-Micro | 0.014 | 231 | 0.000 | 140 | f16 |
 | Granite-4.2-3B | 0.000 | 462 | 0.000 | 299 | q4_0 |
-| LFM2.5-2.6B | 0.000 | 199 | 0.000 ‡ | 114 | f16 |
+| LFM2.5-2.6B | 0.000 | 199 | 0.000 | 141 | f16 |
 | Qwen3.5-4B | 0.000 | 789 | 0.000 | 1032 | f16 |
 
 **Gemma-4-E4B reproduced both target messages verbatim**, prefix and all, from ~19K-token inputs — a
@@ -236,10 +253,11 @@ prefill is a sequential scan that MoltenVK executes slowly. Short-prompt scores 
 **LongBench at n=3 discriminates nothing.** Eight of nine models scored 0/3, the ninth 1/3. Treat the
 column as evidence the runs complete, not as a ranking; MRCR carries the signal at this sample size.
 
-**‡** These three ran before two protocol fixes landed and are pending a re-run. The fixes matter and
-are described in [benchmarking.md](benchmarking.md#long-context-benchmarks): an answer budget too small
-for a reasoning model to finish thinking in, and grading only `content` when reasoning models answer in
-`reasoning_content`.
+**Every row is a genuine answer**, not a parse failure: all nine models score 0 unparsed under the final
+protocol. Three of them were re-run after the [harness fixes](benchmarking.md#long-context-benchmarks)
+landed; the fixes changed LFM2.5 and Gemma-4-E2B from "unparsed" to real wrong answers, and left every
+score unchanged. Granite-4.0-H-Micro reproduced to the decimal (MRCR 0.014, LongBench 140 s against 142 s),
+which is a useful reminder that this machine *is* reproducible when one process owns the GPU.
 
 ## Choosing a model for unattended work
 
