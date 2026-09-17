@@ -17,34 +17,55 @@ Two views of the same measurements: **where** a model sits on the axes that deci
 
 ### Reasoning against retrieval
 
-**Horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60), **vertical** is long-context retrieval (MRCR at ~19K tokens, 0.00 to 1.00). After each name: **generation speed** in tokens per second, then the **largest context that fits on this 4 GB card** — measured, with a q4_0 KV cache, from the [ceilings table](#context-ceilings). Several of those maxima are the model's trained limit rather than the card's.
+Four measurements per model, on one chart:
+
+| Encoding | Meaning |
+|---|---|
+| **Horizontal** | Knowledge and reasoning — mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60 |
+| **Vertical** | Long-context retrieval — MRCR at ~19K tokens, 0.00 to 1.00 |
+| **Dot size** | Generation speed — smallest dot 32 tok/s, largest 58 |
+| **Dot colour** | Largest context that fits on this card — near-white 35K through deep blue 128K, also printed after each name |
+
+Context maxima are the measured q4_0 figures from the [ceilings table](#context-ceilings); several are the model's trained limit rather than the card's. Exact speeds are in the [speed table](#speed-and-fit).
 
 ```mermaid
 ---
 config:
   quadrantChart:
-    chartWidth: 820
-    chartHeight: 620
+    chartWidth: 860
+    chartHeight: 640
     pointLabelFontSize: 11
     titleFontSize: 18
+  themeVariables:
+    quadrant1Fill: "#ffffff"
+    quadrant2Fill: "#ffffff"
+    quadrant3Fill: "#ffffff"
+    quadrant4Fill: "#ffffff"
+    quadrant1TextFill: "#555555"
+    quadrant2TextFill: "#555555"
+    quadrant3TextFill: "#555555"
+    quadrant4TextFill: "#555555"
+    quadrantInternalBorderStrokeFill: "#cccccc"
+    quadrantExternalBorderStrokeFill: "#999999"
+    quadrantPointTextFill: "#222222"
 ---
 quadrantChart
-    title Reasoning vs retrieval (tok/s · max context)
+    title Reasoning vs retrieval — dot size = speed, dot colour = max context
     x-axis "GPQA+MMLU mean 0.10" --> "0.60"
     y-axis "MRCR 0.00" --> "1.00"
     quadrant-1 Strong at both
     quadrant-2 Retrieves, reasons less
     quadrant-3 Weak at both
     quadrant-4 Reasons, cannot retrieve
-    Gemma-4-E4B 32 · 128K: [0.83, 0.94]
-    Qwen3-4B-2507 41 · 35K: [0.60, 0.68]
-    Gemma-4-E2B 53 · 128K: [0.67, 0.34]
-    Phi-4-mini 42 · 49K: [0.49, 0.30]
-    SmolLM3-3B 51 · 64K: [0.38, 0.18]
-    Granite-4.0-H 35 · 128K: [0.45, 0.11]
-    Granite-4.2 40 · 95K: [0.31, 0.06]
-    LFM2.5 58 · 128K: [0.14, 0.06]
-    Qwen3.5-4B 34 · 128K: [0.82, 0.06]
+    Gemma-4-E4B · 128K: [0.83, 0.94] radius: 3, color: #08519c, stroke-color: #16324f, stroke-width: 2px
+    Qwen3-4B-2507 · 35K: [0.60, 0.68] radius: 4, color: #deebf7, stroke-color: #16324f, stroke-width: 2px
+    Gemma-4-E2B · 128K: [0.67, 0.34] radius: 6, color: #08519c, stroke-color: #16324f, stroke-width: 2px
+    Phi-4-mini · 49K: [0.49, 0.30] radius: 4, color: #c6dbef, stroke-color: #16324f, stroke-width: 2px
+    SmolLM3-3B · 64K: [0.38, 0.18] radius: 6, color: #9ecae1, stroke-color: #16324f, stroke-width: 2px
+    Granite-4.0-H · 128K: [0.45, 0.11] radius: 3, color: #08519c, stroke-color: #16324f, stroke-width: 2px
+    Granite-4.2 · 95K: [0.31, 0.06] radius: 4, color: #4292c6, stroke-color: #16324f, stroke-width: 2px
+    LFM2.5 · 128K: [0.14, 0.06] radius: 7, color: #08519c, stroke-color: #16324f, stroke-width: 2px
+    Qwen3.5-4B · 128K: [0.82, 0.06] radius: 3, color: #08519c, stroke-color: #16324f, stroke-width: 2px
 ```
 
 **The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and 2 tok/s — and by the full height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. No capability leaderboard predicts that; it only appears if you measure long context directly.
