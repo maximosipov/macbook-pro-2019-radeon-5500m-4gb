@@ -13,41 +13,33 @@ Which models fit, how fast they run, how much context they hold, and how capable
 
 ## At a glance
 
-Three charts, each sorted best-first, for the numbers that decide a choice on this card. The tables below carry the full detail and the caveats.
-
-**Generation speed** — how fast it types, `tg128` in tokens per second.
+Every text model on one chart, on the three axes that decide a choice here: **horizontal** is knowledge and reasoning (mean of GPQA-Diamond and MMLU-Pro), **vertical** is long-context retrieval (MRCR at ~19K tokens), and the **number after each name is generation speed** in tokens per second.
 
 ```mermaid
-xychart-beta
-    title "Generation speed (tg128, tok/s)"
-    x-axis ["LFM2.5", "Gemma-E2B", "SmolLM3", "Granite-4.1", "Phi-4-mini", "Qwen3-2507", "Granite-4.2", "Granite-4.0H", "Qwen3.5", "Gemma-E4B"]
-    y-axis "tok/s" 0 --> 60
-    bar [58.3, 53.1, 51.2, 46.1, 42.0, 40.5, 40.2, 34.9, 33.6, 32.3]
+quadrantChart
+    title Reasoning vs long-context retrieval (number = tok/s)
+    x-axis Weaker reasoning --> Stronger reasoning
+    y-axis Cannot retrieve --> Retrieves reliably
+    quadrant-1 Strong at both
+    quadrant-2 Retrieves, reasons less
+    quadrant-3 Weak at both
+    quadrant-4 Reasons, cannot retrieve
+    Gemma-4-E4B 32: [0.90, 0.88]
+    Qwen3-4B-2507 41: [0.63, 0.64]
+    Gemma-4-E2B 53: [0.71, 0.38]
+    Phi-4-mini 42: [0.50, 0.36]
+    SmolLM3-3B 51: [0.36, 0.26]
+    Granite-4.0-H 35: [0.45, 0.21]
+    Granite-4.2 40: [0.28, 0.12]
+    LFM2.5 58: [0.10, 0.12]
+    Qwen3.5-4B 34: [0.89, 0.12]
 ```
 
-**Graduate-level reasoning** — GPQA-Diamond, n=100, chance floor 0.25. The most robust capability sample on this page; four models sit clearly above chance.
+**The two models at the right edge are the whole argument.** Gemma-4-E4B and Qwen3.5-4B are separated by 0.005 on reasoning and by 2 tok/s — and by the entire height of the chart on retrieval, where one reproduces a 19K-token message verbatim and the other scores zero. Nothing in a capability leaderboard predicts that; it only appears if you measure long context directly.
 
-```mermaid
-xychart-beta
-    title "GPQA-Diamond accuracy (chance floor 0.25)"
-    x-axis ["Qwen3.5", "Gemma-E4B", "Gemma-E2B", "Qwen3-2507", "Phi-4-mini", "SmolLM3", "Granite-4.0H", "Granite-4.2", "LFM2.5"]
-    y-axis "accuracy" 0 --> 0.6
-    bar [0.56, 0.49, 0.44, 0.37, 0.30, 0.29, 0.26, 0.22, 0.22]
-```
+**Gemma-4-E4B is alone in the top-right**, and it pays for that with speed: it is the slowest decoder in the set. **Gemma-4-E2B** is the pragmatic pick just below it — 53 tok/s, the smallest footprint here (1.65 GB), and enough retrieval to be useful. **LFM2.5** sits in the bottom-left corner by design: the fastest model in the set, built for short high-volume work, and the wrong choice for anything that has to remember a long conversation.
 
-**Long-context retrieval** — MRCR at ~19K tokens. This is where the set separates most sharply, and where speed rankings invert: the fastest decoder scores zero.
-
-```mermaid
-xychart-beta
-    title "MRCR score at ~19K tokens"
-    x-axis ["Gemma-E4B", "Qwen3-2507", "Gemma-E2B", "Phi-4-mini", "SmolLM3", "Granite-4.0H", "Granite-4.2", "LFM2.5", "Qwen3.5"]
-    y-axis "score" 0 --> 1
-    bar [1.0, 0.468, 0.113, 0.103, 0.034, 0.014, 0, 0, 0]
-```
-
-**No model wins twice.** LFM2.5 leads on speed and scores 0 on retrieval; Qwen3.5 leads on reasoning and scores 0 on retrieval; Gemma-4-E4B wins retrieval outright and is the slowest decoder in the set. Pick against the axis your workload actually loads.
-
-*Charts are [Mermaid](https://mermaid.js.org/syntax/xyChart.html) `xychart-beta` blocks, which GitHub renders natively. A viewer that does not support them shows the data as text.*
+*Both axes are normalised, so read positions as ranking rather than magnitude; the absolute numbers are in the tables below. The retrieval axis uses a square-root scale, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob. Chart is a [Mermaid](https://mermaid.js.org/syntax/quadrantChart.html) `quadrantChart`, which GitHub renders natively.*
 
 ## Who makes these models
 
