@@ -1,12 +1,8 @@
 # Local AI on a 2019 MacBook Pro (Radeon Pro 5500M, 4 GB)
 
-This repository shows how to run local LLMs and image generation on a 2019 Intel MacBook Pro, with the model loaded into the discrete AMD GPU. It covers five open-source tools: **ggml**, **llama.cpp**, **stable-diffusion.cpp**, **ollama** and **LocalAI**. Each has a fork with the fixes and build settings this hardware needs.
-
-This page is the overview. Each tool has its own guide with build, run and verification steps.
+This repository shows how to run local LLMs and image generation on a 2019 Intel MacBook Pro, with the model loaded into the discrete AMD GPU. It covers five open-source tools: **ggml**, **llama.cpp**, **stable-diffusion.cpp**, **ollama** and **LocalAI**. Each tool has its own guide with build, run and verification steps. Each has a fork with the fixes and build settings this hardware needs. Every number in this repository was measured on this one machine. This page is the overview.
 
 > **Test machine:** MacBook Pro 16" (2019) · Intel Core i9 · AMD Radeon Pro 5500M, 4 GB ([RDNA1](hardware.md#rdna-generations)) · Intel UHD 630 (not used) · macOS 14.8.2 · MoltenVK 1.4.2
->
-> Every number in this repository was measured on this one machine.
 
 ## Contents
 
@@ -218,7 +214,9 @@ Starting points, all quantized as [Q4_K_M](glossary.md#g-quant) and running full
 |---|---|---|
 | General chat and tool calling | **Qwen3-4B-Instruct-2507** | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 35K with q4_0. |
 | Maths and reasoning | **Qwen3.5-4B** | Best on MATH-500 (0.81) and GPQA Diamond (0.56). 34 tok/s. |
-| Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design gives about 292K tokens of context with f16 KV. |
+| Broad knowledge, quality first | **Gemma-4-E4B** | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
+| Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, fastest prefill (149 pp512) — in 1.65 GB. |
+| Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
 | Speed and small footprint | **LFM2.5-2.6B** | Fastest (58 tok/s) and smallest (1.84 GB). Fits its full 131K context. |
 | Vision | **Qwen3-VL-4B** in ollama | 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512` |
 | Images | **SD-Turbo** at q8_0 | 1.7 s per step in 2 GB. Use SDXL-Turbo for more photorealism. |
@@ -228,6 +226,7 @@ Three findings shape these choices:
 - **Architecture, not parameter count, sets the context ceiling.** Hybrid models keep only a few attention layers, so their KV cache grows 5–18× more slowly than a dense model's.
 - **A quantized KV cache is now nearly free.** With flash attention on the GPU, `-ctk q4_0 -ctv q4_0` costs about 4% in speed and cuts the cache from 32 to 9 KiB per token.
 - **Phi-4-mini and SmolLM3-3B don't suit tool-driven loops on this stack.** They answer tool prompts in prose and emit no parseable `tool_calls`.
+- **The Gemma-4 models follow a requested answer format inconsistently.** They comply with `The answer is (X)` almost perfectly and with LaTeX `\boxed{}` less than a third of the time. If your pipeline parses a fixed output shape, test that shape before committing.
 
 The full speed table, context ceilings, capability scores and unattended-use advice are in [models.md](models.md).
 

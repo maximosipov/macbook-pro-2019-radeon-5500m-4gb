@@ -2,11 +2,102 @@
 
 Which models fit, how fast they run, how much context they hold, and how capable they are. All measurements come from this machine; see [benchmarking.md](benchmarking.md) for the methods and their caveats.
 
+- [Who makes these models](#who-makes-these-models)
 - [Speed and fit](#speed-and-fit)
 - [Context ceilings](#context-ceilings)
 - [Capability scores](#capability-scores)
 - [Choosing a model for unattended work](#choosing-a-model-for-unattended-work)
 - [Image models](#image-models)
+
+## Who makes these models
+
+Six organizations, all shipping open-weight models small enough for a 4 GB card. The tables further down compare them head to head; this section is who they are and what each model actually is.
+
+Release dates, parameter counts, context windows and licenses below come from the model cards and configuration files on Hugging Face, checked September 2026. Everything else on this page was measured here.
+
+### Alibaba — Qwen
+
+The most prolific open-weight family, Apache-2.0 throughout, and the reference point most small models are compared against. Both entries here are strong but very different generations.
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) | Aug 2025 | 4.0B | Dense, 36 layers, [GQA](glossary.md#g-arch) | 262K |
+| [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | Feb 2026 | 4.7B | [Gated DeltaNet](glossary.md#g-gdn) hybrid, 32 layers, multimodal | 262K |
+
+**Qwen3-4B-Instruct-2507** is the non-thinking instruct refresh of Qwen3-4B, and the best tool caller measured here (0.88 BFCL). Its weakness on this hardware is memory shape rather than quality: a 144 KiB/token KV cache, the heaviest in the set, so context is what runs out first.
+
+**Qwen3.5-4B** replaces most attention layers with Gated DeltaNet, a linear-attention variant with a fixed-size state. It leads on maths and science here. Two practical notes: it is natively multimodal, though the GGUF build used here is text-only, and its prefill is a sequential scan — cheap on a native driver, expensive through [MoltenVK](glossary.md#g-moltenvk), so long prompts cost more than its generation rate suggests.
+
+### Google — Gemma
+
+Gemma 4 (March 2026) spans E2B, E4B, 12B, 31B and a 26B-A4B mixture-of-experts; only the two "E" models fit here. The card lists Apache-2.0, alongside Google's [Gemma terms](https://ai.google.dev/gemma/docs/gemma_4).
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [Gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | Mar 2026 | 5.1B stored / ~2B effective | gemma4 [PLE](glossary.md#g-arch), 35 layers, multimodal | 131K |
+| [Gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) | Mar 2026 | 8.0B stored / ~4B effective | gemma4 PLE, 42 layers, multimodal | 131K |
+
+The **E** stands for *effective* parameters, and it is the reason these models matter on a small card. Per-layer embeddings keep a large embedding table in host RAM while only the compute core occupies VRAM, so E2B stores 5.1B parameters but occupies **1.45 GB** of the GPU — less than models with half the parameter count. It also prefills faster than anything else here.
+
+Google additionally publishes **quantization-aware trained** q4_0 GGUFs for both, which are trained to tolerate 4-bit weights rather than being quantized after the fact. The E4B QAT build is 4.8 GB and does not fit this card. The E2B one does, and was measured here against the community Q4_K_M build:
+
+| | Q4_K_M | QAT q4_0 |
+|---|---|---|
+| File size | 2.9 GB | 3.1 GB |
+| VRAM resident (4K context) | 1652 MB | **1586 MB** |
+| pp512 | **148.8** | 136.8 |
+| tg128 | 53.1 | **54.8** |
+| MATH-500 | 0.29 ¶ | 0.14 ¶ |
+| IFBench strict | 0.24 | 0.22 |
+| MMLU-Pro (n=28) | **0.43** | 0.29 |
+| GPQA-Diamond | 0.44 | 0.43 |
+| BFCL AST | 0.838 | 0.838 |
+
+**Quantization-aware training buys nothing here.** The two builds tie on the largest-sample benches — GPQA (0.44 against 0.43, n=100) and BFCL (identical at n=80) — and IFBench separates them by less than its noise. QAT trades 8% of prefill for 3% of generation and 66 MB of VRAM. The MMLU-Pro gap looks large but rests on 12 correct answers against 8 at n=28, below the resolution of that sample. Both MATH scores are the ¶ formatting artifact, and QAT is worse at it: it produced a parseable `\boxed{}` on 17 of 100 items against 33, while being right on a similar share of what it did format (82% against 88%).
+
+So on this hardware the ordinary Q4_K_M build is the one to use: a smaller download, faster prefill, and no measured quality cost.
+
+### IBM — Granite
+
+Enterprise-targeted, Apache-2.0, and the family that takes tool calling and instruction following most seriously at small sizes. Three generations appear here, which is useful for seeing what changed.
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [Granite-4.0-H-Micro](https://huggingface.co/ibm-granite/granite-4.0-h-micro) | Sep 2025 | 3.2B | [Mamba-2](glossary.md#g-ssm) hybrid, 40 layers (only 4 attention) | 128K |
+| [Granite-4.1-3B](https://huggingface.co/ibm-granite/granite-4.1-3b) | Apr 2026 | 3.4B | Dense, 40 layers | 131K |
+| [Granite-4.2-3B](https://huggingface.co/ibm-granite/granite-4.2-3b) | Aug 2026 | 3.7B | Dense GQA, 40 layers | 131K |
+
+**Granite-4.0-H-Micro** is the one that matters on this card. Keeping just 4 of 40 layers as attention — the rest hold a fixed-size recurrent state — gives it a KV cache of 8 KiB/token, so its entire trained context fits in VRAM. Combined with the best tool-calling reliability measured here, that makes it the pick for unattended work.
+
+The later dense 4.1 and 4.2 models are newer but not better on this hardware: they give up the hybrid memory advantage, and 4.2 scores at or below the 4.0 hybrid on every capability bench run here. Granite-4.1-3B has only speed and tool-call data — it was never put through the capability suite, so it has no row in that table.
+
+### Liquid AI — LFM
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [LFM2.5-2.6B](https://huggingface.co/LiquidAI/LFM2.5-2.6B) | Jul 2026 | 2.7B | [LFM2 short-convolution](glossary.md#g-lfm2) hybrid, 30 layers | 131K |
+
+Liquid AI builds specifically for on-device inference, and it shows: this is the fastest decoder and the smallest resident model in the set, and it fits its whole 131K window without quantizing the cache. Most layers are gated short convolutions rather than attention.
+
+Note the license — **LFM Open License v1.0**, not Apache-2.0. It is the only model here with custom terms, so check them if the use is commercial.
+
+Liquid AI also publishes [Pipette](glossary.md#g-pipette), the on-device benchmark suite whose datasets this page reuses.
+
+### Microsoft — Phi
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [Phi-4-mini-instruct](https://huggingface.co/microsoft/Phi-4-mini-instruct) | Feb 2025 | 3.8B | Dense GQA, 32 layers | 131K |
+
+The oldest model in the set, MIT-licensed, and built on the Phi thesis that carefully curated training data beats scale. It holds up on maths and MMLU-Pro, but it is the tightest fit here at 3.04 GB, and on this stack it answers tool prompts in prose rather than emitting `tool_calls` — which rules it out of agent loops until that template gap is fixed.
+
+### Hugging Face — SmolLM
+
+| Model | Released | Parameters | Architecture | Trained context |
+|---|---|---|---|---|
+| [SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B) | Jul 2025 | 3.1B | Dense, 36 layers | 65K |
+
+Hugging Face's own fully-open small model — weights, data recipe and training details all published, which makes it the most reproducible model here. It scores well on maths, but has the shortest context window of the set, the weakest instruction-following scores, and the same missing `tool_calls` problem as Phi-4-mini on this stack.
 
 ## Speed and fit
 
@@ -16,14 +107,14 @@ All [Q4_K_M](glossary.md#g-quant), measured with `llama-bench -ngl 99 -fa 1 -p 5
 |---|---|---|---|---|
 | LFM2.5-2.6B | [LFM2 hybrid](glossary.md#g-lfm2) (short convolution) | 122.3 ± 0.1 | **58.3 ± 0.1** | 1.84 GB — smallest, most room for context |
 | SmolLM3-3B | dense | 93.6 ± 14.6 | 51.2 ± 0.1 | 2.28 GB |
-| Gemma-4-E2B | gemma4 [PLE](glossary.md#g-arch) | **142.6 ± 0.3** | 50.7 ± 0.2 | 1.45 GB (the embedding table stays in host RAM) |
+| Gemma-4-E2B | gemma4 [PLE](glossary.md#g-arch) | **148.8 ± 0.5** | 53.1 ± 0.1 | 1.45 GB weights, 1.65 GB resident at 4K context (the embedding table stays in host RAM) |
 | Granite-4.1-3B | dense | 78.9 ± 15.2 | 46.1 ± 0.1 | 2.24 GB, KV-bound |
 | Phi-4-mini | dense [GQA](glossary.md#g-arch) | 75.2 ± 13.1 | 42.0 ± 0.1 | 3.04 GB — tightest fit here |
 | Qwen3-4B-Instruct-2507 | dense [GQA](glossary.md#g-arch) | 59.4 ± 0.6 | 40.5 ± 0.1 | 2.82 GB, heaviest [KV cache](glossary.md#g-kv) (144 KiB/token) |
 | Granite-4.2-3B | dense [GQA](glossary.md#g-arch) | 76.1 ± 12.2 | 40.2 ± 10.4 | 2.48 GB |
 | Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid | 83.6 ± 17.1 | 34.9 ± 11.2 | 1.95 GB |
 | Qwen3.5-4B | [Gated DeltaNet](glossary.md#g-gdn) | 59.5 ± 0.6 | 33.6 ± 0.1 | 3.05 GB |
-| Gemma-4-E4B | gemma4 [PLE](glossary.md#g-arch) | 55.1 ± 0.5 | 30.9 ± 0.0 | 3.3 GB |
+| Gemma-4-E4B | gemma4 [PLE](glossary.md#g-arch) | 60.8 ± 8.7 | 32.3 ± 0.1 | 3.21 GB resident at 4K context |
 
 Every model here loads and runs correctly on the Vulkan build with no source changes.
 
@@ -37,7 +128,7 @@ Every model here loads and runs correctly on the Vulkan build with no source cha
 
 | Model | [Architecture](glossary.md#g-arch) (attention layers) | KV f16 per token | Max context, f16 KV | Max context, q4_0 KV | Trained for |
 |---|---|---|---|---|---|
-| Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~292K** | ~1.0M (capped) | 1.0M |
+| Granite-4.0-H-Micro | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~131K (capped)** | ~131K (capped) | 128K |
 | LFM2.5-2.6B | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~131K (capped)** | ~131K (capped) | 131K |
 | Qwen3.5-4B | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | ~131K | 262K |
 | SmolLM3-3B | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | ~66K (capped) | 66K |
@@ -47,7 +138,7 @@ Every model here loads and runs correctly on the Vulkan build with no source cha
 
 "Capped" means the model's *trained* context runs out before the VRAM does.
 
-The split is stark, and it's the practical payoff of hybrid architectures. Granite-4.0-H-Micro keeps only 4 of its 40 layers as attention — the rest hold a fixed-size recurrent state — so its cache grows at 8 KiB per token and it reaches about 292K tokens even at full f16 precision. LFM2.5 fits its entire 131K trained window with no KV quantization at all. The dense models are VRAM-bound and modest: Qwen3-4B-2507 manages about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) is what lifts it to about 35K.
+The split is stark, and it's the practical payoff of hybrid architectures. Granite-4.0-H-Micro keeps only 4 of its 40 layers as attention — the rest hold a fixed-size recurrent state — so its cache grows at 8 KiB per token. On VRAM alone it would reach about 292K tokens at full f16 precision; in practice its 128K trained window runs out first, so the whole thing fits with room to spare. LFM2.5 fits its entire 131K trained window with no KV quantization at all. The dense models are VRAM-bound and modest: Qwen3-4B-2507 manages about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) is what lifts it to about 35K.
 
 ## Capability scores
 
@@ -64,9 +155,19 @@ Measured over `llama-server`'s OpenAI endpoint at temperature 0, with thinking d
 | Phi-4-mini | 0.67 | 0.10 / 0.13 | 0.39 | 0.30 | n/a ‡ |
 | Granite-4.0-H-Micro | 0.63 | 0.19 / 0.20 | 0.39 | 0.26 | 0.86 |
 | Granite-4.2-3B | 0.62 | 0.19 / 0.24 | 0.29 | 0.22 § | 0.65 |
+| Gemma-4-E4B | 0.15 ¶ | 0.24 / **0.32** | **0.54** | 0.49 | 0.85 |
+| Gemma-4-E2B | 0.29 ¶ | 0.24 / 0.29 | 0.43 | 0.44 | 0.84 |
 | *frontier reference* | *~0.98* ᵍ | *~0.83* ᵉ | *~0.90* ᵇ | *~0.955* ᶠ | *~0.78* ᵃ |
 
 Sample sizes: n=100 for MATH-500, IFBench and GPQA-Diamond; n=28 (stratified) for MMLU-Pro; n=80 for BFCL AST.
+
+**The Gemma-4 models were the gap in this table, and they place well.** Both had speed numbers from an earlier round but no capability scores, which is why neither appeared in any recommendation until now.
+
+**Gemma-4-E4B takes the top MMLU-Pro score in the set** (0.54, against Qwen3.5-4B's 0.46) and is second on GPQA-Diamond (0.49), with the best IFBench loose score (0.32) and 0.85 on tool calling. It is also the slowest model measured here (32.3 tg128) and the second-largest resident (3.21 GB), so it buys quality with everything else.
+
+**Gemma-4-E2B is the small-model surprise.** At 1.65 GB resident — the smallest here except on paper — it places **second on IFBench** (0.24, behind only Qwen3.5-4B), **second on MMLU-Pro** (0.43, tied with Qwen3-4B-2507), **second on GPQA-Diamond** (0.44), and **third on tool calling** (0.84 BFCL, and 23/24 on the custom set including the negative cases). It also has the fastest prefill in the set at 148.8 pp512.
+
+Its GPQA score is also the most trustworthy in that column: it emitted a graded answer on **100 of 100** items, against 23 and 40 unparsed for the two Qwen models above it. The same holds for E4B (5 unparsed), so both Gemma rows understate the gap to the Qwen models rather than flattering it. Read its MATH-500 score with the ¶ caveat below, not as a maths verdict.
 
 **How to read it.** Every column is accuracy from 0 to 1. MATH-500 is graded by symbolic equivalence. IFBench strict is the fraction of prompts where *every* verifiable instruction was met; loose tolerates markdown and stray boundary lines. MMLU-Pro is 10-option reasoning (chance floor 0.1); GPQA-Diamond is 4-option graduate science (chance floor 0.25); BFCL AST is single-turn tool-call correctness. The frontier reference row gives scale only — those are published full-benchmark scores from each vendor's own harness, not a target this hardware was measured against.
 
@@ -74,11 +175,12 @@ Sample sizes: n=100 for MATH-500, IFBench and GPQA-Diamond; n=28 (stratified) fo
 
 - **† LFM2.5's MMLU-Pro score of 0.14** is depressed by the answer-token budget. With its reasoning preamble, it often doesn't reach the required `The answer is (X)` before the cap, and scores 0 on those items. Read it as *not measured well here*; its MATH and IFBench scores are mid-pack.
 - **‡ Phi-4-mini and SmolLM3 show "n/a" for BFCL.** Both answer tool prompts *in prose* and emit no parseable `tool_calls` through llama.cpp's `--jinja` path on this build. That's a chat-template gap on this stack, likely fixable with a `--chat-template` override or a newer build, not an absence of tool-calling ability. Recorded as n/a rather than 0 so it isn't averaged in.
+- **¶ Gemma-4-E2B's MATH-500 0.29 measures one formatting convention, not arithmetic.** It emitted a parseable `\boxed{}` on only **33 of 100** items — against 98/100 for Granite-4.0-H-Micro — and was **correct on 29 of those 33 (88%)**. The other 67 score 0 under the convention that an unparseable answer is wrong. This is specific to MATH's LaTeX `\boxed{}` requirement rather than a general formatting weakness: on GPQA-Diamond, which wants `The answer is (X)`, the same model produced a graded answer on **100 of 100** items. It is a family trait — E4B formatted 17 of 100 and the QAT build 17 of 100, each right on 82-88% of what it did format. Whatever the true maths ability of these models is, this column does not measure it.
 - **§ GPQA is understated for these rows** by a high unparsed rate: the answer letter had to be recovered from the reasoning channel, and these models often emitted no graded A–D (LFM2.5 57%, Granite-4.2 60%, Qwen3-2507 40% unparsed), scoring 0 there. Their true scores are above the printed value.
 
-**What the numbers say.** Qwen3.5-4B leads on maths, with SmolLM3-3B and Qwen3-4B-2507 close behind. **IFBench is brutal for everything in this class** — the best here is 0.26 against a frontier of about 0.83, making strict instruction-following the clearest gap. Tool calling splits cleanly into models that emit OpenAI `tool_calls` on this stack (Qwen3-4B-2507 and Granite-4.0-H-Micro lead) and models that don't yet. On GPQA-Diamond, only Qwen3.5-4B and Qwen3-4B-2507 sit clearly above the chance floor. Turning thinking on would raise the maths, MMLU and GPQA columns for the reasoning-capable models, at a large cost in throughput; it was disabled here for a like-for-like comparison.
+**What the numbers say.** Qwen3.5-4B leads on maths, with SmolLM3-3B and Qwen3-4B-2507 close behind. **IFBench is brutal for everything in this class** — the best here is 0.26 against a frontier of about 0.83, making strict instruction-following the clearest gap, and Gemma-4-E2B is second on it at a third of the size. Tool calling splits cleanly into models that emit OpenAI `tool_calls` on this stack (Qwen3-4B-2507, Granite-4.0-H-Micro and Gemma-4-E2B lead) and models that don't yet. On GPQA-Diamond, the models clearly above the 0.25 chance floor are Qwen3.5-4B (0.56), Gemma-4-E4B (0.49), Gemma-4-E2B (0.44) and Qwen3-4B-2507 (0.37). MMLU-Pro's top score belongs to Gemma-4-E4B (0.54). Turning thinking on would raise the maths, MMLU and GPQA columns for the reasoning-capable models, at a large cost in throughput; it was disabled here for a like-for-like comparison.
 
-**Coherence.** Every model clears the [correctness battery](benchmarking.md#text-correctness-battery)'s repetition check (repetition ratio ≈ 0.01), including the hybrids. A MATH-500 score of 0.62–0.81 is itself proof that the output is coherent rather than [NaN](glossary.md#g-nan) garbage.
+**Coherence.** Every model scored here clears the [correctness battery](benchmarking.md#text-correctness-battery)'s repetition check (repetition ratio ≈ 0.01), including the hybrids and all three Gemma builds. Gemma-4-E4B passes the battery outright (4/4 plus coherence); the two E2B builds answer correctly but behind a `[Start thinking]` preamble that defeats the exact-match scorer, which is a harness artifact rather than a model failure. Scoring well on any of these benchmarks is itself proof that the output is coherent rather than [NaN](glossary.md#g-nan) garbage — a broken GPU path produces fluent loops, not 0.84 on tool calling.
 
 **Long context was not usable for the benchmarks.** [LongBench-v2](glossary.md#g-longbench) and [MRCR](glossary.md#g-mrcr) were run on three models and largely timed out at 12–19K tokens. That's a runtime wall on this card at long context, not a capability verdict.
 
@@ -101,6 +203,10 @@ If the machine is meant to work on its own — an agent loop, a batch job, a sch
 **Granite-4.0-H-Micro is the pick**, with real competition. It has the best tool-calling behaviour measured here (24/24 on the custom set including negative cases, and 0.86 BFCL AST, statistically tied with Qwen3-4B-2507's 0.88), and its fixed-size recurrent state means context growth costs almost no VRAM. It's mid-pack on speed.
 
 **LFM2.5-2.6B is the strongest all-rounder** if footprint and throughput matter: the fastest decoder, the smallest resident, cheap context growth, proper `tool_calls`, and coherent on Vulkan. Choose it over Granite for speed and headroom; choose Granite when tool-call reliability is paramount. Qwen3-4B-Instruct-2507 remains the tool-calling leader and a good default for bounded context.
+
+**Gemma-4-E2B is the new contender at the small end**, and the one this page previously under-rated because it had speed numbers but no capability scores. It calls tools well (0.84 BFCL, 23/24 on the custom set), follows instructions better than anything here except Qwen3.5-4B, matches Qwen3-4B-2507 on MMLU-Pro, prefills fastest in the set, and does it in 1.65 GB. **Gemma-4-E4B** is the quality end of the same family: the best MMLU-Pro score measured here (0.54) and second on GPQA (0.49), at the cost of being the slowest model in the set and needing 3.21 GB.
+
+Both share one quirk worth testing before you rely on them: they follow a requested answer format inconsistently. On GPQA's `The answer is (X)` they are near-perfect, on MATH's `\boxed{}` they comply less than a third of the time. If your loop parses a specific output shape, check that shape first. Their [KV cache](#context-ceilings) geometry has not been measured yet, so their context ceilings on this card are not yet known.
 
 **Avoid Phi-4-mini and SmolLM3-3B for tool-driven loops.** They emit no parseable `tool_calls` on this stack, so they will silently never call a function. Nothing in the set needs avoiding on stability grounds: all of them are coherent and survive.
 
