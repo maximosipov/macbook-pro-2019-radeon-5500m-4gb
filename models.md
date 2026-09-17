@@ -214,6 +214,10 @@ Measured over `llama-server`'s OpenAI endpoint at temperature 0, with thinking d
 
 > **These are relative rankings on this hardware under one protocol. They are not comparable to published leaderboard numbers** — the sample sizes are small, and the quantization, subset and prompt format all differ from published runs. Protocols are in [benchmarking.md](benchmarking.md#capability-benchmarks).
 
+![Heatmap of capability scores: nine models by six benchmarks, shaded white to blue by rank within each benchmark](images/score-heatmap.png)
+
+*The same numbers as the table below, shaded white-to-blue. Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Rendered as an image because GitHub strips inline CSS from Markdown, so a genuinely coloured table cell does not survive there; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
+
 | Model | Maker | [MATH-500](glossary.md#g-math500) | [IFBench](glossary.md#g-ifbench) strict / loose | [MMLU-Pro](glossary.md#g-mmlu) | [GPQA-D](glossary.md#g-gpqa) | [BFCL AST](glossary.md#g-bfcl) |
 |---|---|---|---|---|---|---|
 | Qwen3-4B-2507 | Alibaba | 0.75 | 0.21 / 0.23 | 0.43 | 0.37 § | **0.88** |
