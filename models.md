@@ -80,9 +80,92 @@ quadrantChart
 
 ### Ranking across every benchmark
 
-![Heatmap of capability scores: nine models by six benchmarks, shaded white to blue by rank within each benchmark](images/score-heatmap.png)
+```mermaid
+block-beta
+    columns 7
+    h0["model"] h1["MATH-500"] h2["IFBench"] h3["MMLU-Pro"] h4["GPQA-D"] h5["BFCL"] h6["MRCR"]
+    m0["Qwen3-4B-2507 · Alibaba"] c0_0["0.75"] c0_1["0.21"] c0_2["0.43"] c0_3["0.37"] c0_4["0.88"] c0_5["0.47"]
+    m1["Qwen3.5-4B · Alibaba"] c1_0["0.81"] c1_1["0.26"] c1_2["0.46"] c1_3["0.56"] c1_4["0.75"] c1_5["0.00"]
+    m2["Gemma-4-E2B · Google"] c2_0["0.29"] c2_1["0.24"] c2_2["0.43"] c2_3["0.44"] c2_4["0.84"] c2_5["0.11"]
+    m3["Gemma-4-E4B · Google"] c3_0["0.15"] c3_1["0.24"] c3_2["0.54"] c3_3["0.49"] c3_4["0.85"] c3_5["1.00"]
+    m4["Granite-4.0-H-Micro · IBM"] c4_0["0.63"] c4_1["0.19"] c4_2["0.39"] c4_3["0.26"] c4_4["0.86"] c4_5["0.01"]
+    m5["Granite-4.2-3B · IBM"] c5_0["0.62"] c5_1["0.19"] c5_2["0.29"] c5_3["0.22"] c5_4["0.65"] c5_5["0.00"]
+    m6["LFM2.5-2.6B · Liquid AI"] c6_0["0.68"] c6_1["0.23"] c6_2["0.14"] c6_3["0.22"] c6_4["0.69"] c6_5["0.00"]
+    m7["Phi-4-mini · Microsoft"] c7_0["0.67"] c7_1["0.10"] c7_2["0.39"] c7_3["0.30"] c7_4["n/a"] c7_5["0.10"]
+    m8["SmolLM3-3B · Hugging Face"] c8_0["0.74"] c8_1["0.08"] c8_2["0.29"] c8_3["0.29"] c8_4["n/a"] c8_5["0.03"]
+    style h0 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h1 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h2 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h3 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h4 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h5 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style h6 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
+    style m0 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m1 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m2 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m3 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m4 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m5 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m6 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m7 fill:#ffffff,stroke:#ffffff,color:#333333
+    style m8 fill:#ffffff,stroke:#ffffff,color:#333333
+    style c0_0 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c1_0 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c2_0 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c3_0 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c4_0 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c5_0 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c6_0 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c7_0 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c8_0 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c0_1 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c1_1 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c2_1 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c3_1 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c4_1 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c5_1 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c6_1 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c7_1 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c8_1 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c0_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c1_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c2_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c3_2 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c4_2 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c5_2 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c6_2 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c7_2 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c8_2 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c0_3 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c1_3 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c2_3 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c3_3 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c4_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c5_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c6_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c7_3 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c8_3 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c0_4 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c1_4 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c2_4 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c3_4 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c4_4 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c5_4 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c6_4 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
+    style c7_4 fill:#f2f2f2,stroke:#ffffff,color:#999999
+    style c8_4 fill:#f2f2f2,stroke:#ffffff,color:#999999
+    style c0_5 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
+    style c1_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c2_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c3_5 fill:#08519c,stroke:#ffffff,color:#ffffff
+    style c4_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c5_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c6_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c7_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c8_5 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+```
 
-*Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Rendered as an image because GitHub strips inline CSS from Markdown, so a genuinely coloured table cell does not survive there; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
+*Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Built with Mermaid's `block-beta`, which takes a per-cell fill; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
 
 **Scan a row to judge a model, a column to judge a benchmark.** No row is blue throughout: Qwen3.5-4B is deepest on three columns and palest on MRCR, Gemma-4-E4B owns MRCR and MMLU-Pro while sitting bottom on MATH-500. The BFCL column is the flattest — seven of nine between 0.65 and 0.88 — so tool calling barely separates this class, while MRCR is the steepest.
 
