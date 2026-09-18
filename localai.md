@@ -1,6 +1,6 @@
 # LocalAI
 
-One OpenAI-compatible endpoint for text *and* images, packaged as a menu-bar app. No source changes, but the Vulkan build has to be composed by hand.
+One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. No source changes, but the Vulkan build must be composed by hand.
 
 | | |
 |---|---|
@@ -17,27 +17,23 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 ## Overview
 
-LocalAI puts many inference backends behind one OpenAI-compatible endpoint, with management around them:
+Many inference backends behind one OpenAI-compatible endpoint:
 
 - **An API well beyond chat** — chat and text completions, embeddings, image generation, audio transcription and text-to-speech, a realtime speech API, vision, reranking and object detection.
 - **Backends as separate processes** — llama.cpp, vLLM, transformers, diffusers, whisper, piper and others, each a [gRPC server](glossary.md#g-grpc) that LocalAI starts and supervises. That indirection is the whole story of this build.
 - **Galleries** — a model gallery and a backend gallery that installs backends as [OCI images](glossary.md#g-oci), with a web UI over both.
 - **Agent-side features** — constrained grammars, tool calling, MCP support and built-in agents.
 
-On this machine, only the llama.cpp and stable-diffusion backends are worth building; the rest target Python and CUDA and will find no accelerator here.
-
-**Why it matters here:** it's the only tool in this repository that gives you a drop-in OpenAI endpoint *and* model management without being a desktop chat app. Point any OpenAI SDK client at it and it works — including a coding agent, which is the [quick start](README.md#quick-start-localai-and-opencode).
+Only the llama.cpp and stable-diffusion backends are worth building here; the rest target Python and CUDA and find no accelerator. It is the only tool here that gives a drop-in OpenAI endpoint plus model management without being a desktop chat app.
 
 ## Changes on this branch
 
-**No source changes are needed.** But LocalAI's macOS build targets Apple Silicon and Metal, so a Vulkan build has to be composed from two pieces:
+**No source changes.** LocalAI's macOS build targets Apple Silicon and Metal, so a Vulkan build is composed from two pieces:
 
-1. Its llama backend is a **separate gRPC server process**, built from a pinned llama.cpp. You have to substitute one built from that pin with the [ten Vulkan fix commits](llama.cpp.md#changes-on-this-branch) cherry-picked on.
-2. Because the backend is a child process, the MoltenVK environment has to be carried into it by a wrapper script.
+1. The llama backend is a separate gRPC server process built from a pinned llama.cpp; substitute one built from that pin with the [ten Vulkan fix commits](llama.cpp.md#changes-on-this-branch) cherry-picked on.
+2. The backend is a child process, so a wrapper script must carry the MoltenVK environment into it.
 
-Two Makefile traps silently give you a Metal build instead, and both are covered in [Build](#build).
-
-The branch also adds the macOS menu-bar app and its packaging script, described in [Package the app](#package-the-app).
+Two Makefile traps silently produce a Metal build instead; both are covered in [Build](#build). The branch also adds the menu-bar app and its packaging script.
 
 ## Build
 
@@ -52,7 +48,7 @@ make build                          # Go server + React UI -> ./local-ai
 
 ### The llama.cpp backend
 
-The backend's llama.cpp source must be **LocalAI's pinned commit with the ten Vulkan fix commits cherry-picked onto it**, not the fork's branch tip. LocalAI's `grpc-server.cpp` is written against that exact commit, and llama.cpp's master drifts within days:
+The backend's llama.cpp source must be LocalAI's pinned commit with the ten fix commits cherry-picked on, not the fork's branch tip: `grpc-server.cpp` is written against that exact commit, and master drifts within days.
 
 ```bash
 PIN="$(sed -n 's/^LLAMA_VERSION?=//p' backend/cpp/llama-cpp/Makefile)"
@@ -71,7 +67,7 @@ cd ../../../..
 ( cd backend/cpp/llama-cpp && mkdir -p llama.cpp/tools/grpc-server && bash prepare.sh )
 ```
 
-Then build the backend. **`CMAKE_ARGS` must be passed through the environment**, not on the make command line: the Makefile does `CMAKE_ARGS?=` followed by `CMAKE_ARGS+=…`, and a command-line variable would override those appends and drop `-DGGML_VULKAN=1` itself.
+`CMAKE_ARGS` must be passed through the environment, not the make command line: the Makefile does `CMAKE_ARGS?=` then `CMAKE_ARGS+=…`, and a command-line variable overrides those appends and drops `-DGGML_VULKAN=1`.
 
 ```bash
 P="$(brew --prefix)"
@@ -87,13 +83,13 @@ export CMAKE_ARGS="-DGGML_METAL=OFF \
 make -C backend/cpp/llama-cpp grpc-server
 ```
 
-`-DGGML_METAL=OFF` is required here for a subtle reason: in that Makefile, `BUILD_TYPE=vulkan` and the Darwin branch are arms of **one if/else chain**, so choosing vulkan on macOS means the Darwin arm — the one that would have set `GGML_METAL=OFF` — never runs.
+`-DGGML_METAL=OFF` is required because `BUILD_TYPE=vulkan` and the Darwin branch are arms of one if/else chain: choosing vulkan on macOS skips the Darwin arm that would have set `GGML_METAL=OFF`.
 
 Check the result: `otool -L backend/cpp/llama-cpp/grpc-server | grep -i metal` must print nothing.
 
 ### The image backend
 
-LocalAI's `stablediffusion-ggml` backend wraps [stable-diffusion.cpp](stable-diffusion.cpp.md), so the image models are reachable over the OpenAI images API without a second server. The same Makefile trap repeats one directory over, with the same fix:
+The `stablediffusion-ggml` backend wraps [stable-diffusion.cpp](stable-diffusion.cpp.md), so image models are reachable over the OpenAI images API without a second server. The same Makefile trap repeats, with the same fix:
 
 ```bash
 export BUILD_TYPE=vulkan
@@ -112,14 +108,14 @@ Check: `otool -L backend/go/stablediffusion-ggml/libgosd-fallback.so` must list 
 
 ### Package the app
 
-LocalAI ships no desktop app, so this branch adds a small one: a menu-bar (`NSStatusItem`) app with no Dock icon, which owns the server process. It starts the server with the MoltenVK environment and the device pin already set, polls `/readyz` to drive its status line, and offers Open WebUI, Copy API Base URL, Open Models Folder, Show Log, Restart and Quit.
+The branch adds a menu-bar (`NSStatusItem`) app with no Dock icon that owns the server process: it starts the server with the MoltenVK environment and device pin set, polls `/readyz` for its status line, and offers Open WebUI, Copy API Base URL, Open Models Folder, Show Log, Restart and Quit.
 
-Two things it must get right, both of which fail silently otherwise:
+Two things fail silently if wrong:
 
 - **Pass the storage paths explicitly.** LocalAI resolves its data, backends and configuration directories *relative to the working directory*. An app bundle launches with `cwd=/`, so the data path becomes `//data` and the server exits with `read-only file system`, with nothing in the UI to say why. The app passes `--backends-path`, `--localai-config-dir`, `--generated-content-path` and `LOCALAI_DATA_PATH` under `~/Library/Application Support/LocalAI/`.
 - **Make the bundle self-contained.** `grpc-server` links **107 Homebrew dylibs**, against two for the ollama DMG. The packaging script walks that dependency closure with `otool`, copies each library into `Contents/Frameworks/`, rewrites every install name to `@rpath`, and adds the matching rpaths. The bundled ICD JSON points at `../../Frameworks/libMoltenVK.dylib` so the app stays relocatable. The acceptance test is that no Homebrew path survives anywhere in the bundle.
 
-The result is a 367 MB `.app` and a **142 MB** DMG, ad-hoc signed. There's no Apple Developer identity involved, so it isn't notarized and the quarantine bit has to be cleared on first launch. Weights are deliberately **not** bundled; on first run the app seeds the model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if one is present.
+The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present.
 
 Installing it: [quick start](README.md#quick-start-localai-and-opencode).
 
@@ -213,13 +209,13 @@ SDXL-Turbo additionally needs `"keep_vae_on_cpu:true"` and sits at 3.8 GB, the e
 
 ### Use with a coding agent
 
-The default `context_size: 4096` is fine for chat and **useless for a coding agent**: OpenCode's system prompt and tool schemas fill most of it before you type anything. Its opening request carries 12 tool schemas, 38 KB of JSON, which renders to **11,132 prompt tokens**. The server will tell you so itself:
+The default `context_size: 4096` is useless for a coding agent: OpenCode's opening request carries 12 tool schemas, 38 KB of JSON, rendering to 11,132 prompt tokens. The server reports it:
 
 ```
 {"error":{"message":"request (11132 tokens) exceeds the available context size (4096 tokens), try increasing it"}}
 ```
 
-Give it a profile with a larger window, paid for with a [quantized KV cache](glossary.md#g-kv-quant). Either Qwen3-4B-Instruct-2507 or Granite-4.0-H-Micro works; Granite is the better pick, because it scored best on tool calling here and its [Mamba-2](glossary.md#g-ssm) recurrent state makes a wider window nearly free in VRAM.
+Use a larger window with a [quantized KV cache](glossary.md#g-kv-quant). Granite-4.0-H-Micro is the better pick: best tool calling measured here, and its [Mamba-2](glossary.md#g-ssm) recurrent state makes a wide window nearly free in VRAM.
 
 ```yaml
 # ~/Library/Application Support/LocalAI/models/granite-coder.yaml
@@ -243,13 +239,13 @@ The OpenCode side of the configuration is in the [quick start](README.md#quick-s
 | Warm turn, one-word answer | **10.1 s** |
 | Warm turn, a real question with a few sentences of answer | **13.8 s** and **23.6 s** |
 
-The shape of that is the whole story: **the first turn is expensive and the rest are not**, because the agent's system prompt only has to be [prefilled](glossary.md#g-prefill) once. Keep the server resident and the session alive and it's usable; restart between questions and you pay the first turn every time.
+The first turn is expensive and the rest are not: the agent's system prompt is [prefilled](glossary.md#g-prefill) once. Keep the server resident and the session alive.
 
-It is also a 3B-class model, and it shows. Asked for a one-liner to count lines across `.md` files, it produced a command that counts *files* and described it as counting lines. Asked what llama.cpp's `-ngl` flag does, it answered that it "disables the NVIDIA GPU library", which is the opposite of true. Both answers came back in under 25 seconds. It's fast enough to be pleasant, and wrong often enough that you must read everything it hands you.
+It is a 3B-class model. Asked for a one-liner counting lines across `.md` files it produced a command that counts files; asked what `-ngl` does it answered that it "disables the NVIDIA GPU library". Read what it produces.
 
 ## Verify
 
-**LocalAI's own logs will not tell you where the model landed.** Its hardware probe reports `GPU vendor=""` and `Total available VRAM 0` on macOS, and it doesn't forward the backend's ggml banner into its log. Ask IOKit instead:
+LocalAI's hardware probe reports `GPU vendor=""` and `Total available VRAM 0` on macOS and does not forward the backend's ggml banner, so its logs cannot confirm placement. Ask IOKit:
 
 ```bash
 curl -s http://127.0.0.1:8085/readyz -o /dev/null -w '%{http_code}\n'   # 200
@@ -257,7 +253,7 @@ curl -s http://127.0.0.1:8085/v1/models | python3 -m json.tool
 ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
 ```
 
-A 4B Q4_K_M model resident on the Radeon shows about **3.4 GiB** in use. If that stays near idle while generation runs, the model is on the CPU: check that [`gpu_layers`](glossary.md#g-ngl) survived the load, and set `LOCALAI_DISABLE_HARDWARE_DEFAULTS=true` if LocalAI's auto-tuning is overriding you.
+A 4B Q4_K_M model resident on the Radeon shows about 3.4 GiB. If that stays near idle during generation the model is on the CPU: check [`gpu_layers`](glossary.md#g-ngl) survived the load, and set `LOCALAI_DISABLE_HARDWARE_DEFAULTS=true` if auto-tuning overrides it.
 
 ## Performance
 
@@ -271,7 +267,7 @@ Qwen3-4B-Instruct-2507 Q4_K_M, context 4096, f16 KV cache, `gpu_layers: 99`:
 | GPU utilisation during generation | 82% | — |
 | Model load to first token | ~0.9 s for a short prompt | — |
 
-The first column is the more careful measurement, and those three runs are the **tightest numbers in this whole repository** — which is why [benchmarking.md](benchmarking.md) recommends measuring a running server over micro-benchmarks. The second column was taken while a compile was saturating all 16 cores, so read it as "at least as fast as before", not as a measured 10% gain.
+The flash-attention-off column is the more careful measurement and the tightest spread in this repository, which is why [benchmarking.md](benchmarking.md) prefers sustained serving to micro-benchmarks. The flash-attention-on column was taken while a compile saturated all 16 cores; read it as a lower bound.
 
 Granite-4.0-H-Micro, served from the same stack at context 8192:
 
@@ -280,7 +276,7 @@ Granite-4.0-H-Micro, served from the same stack at context 8192:
 | Generation, 128 tokens, 3 warm runs | **27.8 / 32.5 / 32.3 tok/s** |
 | VRAM resident during generation | **2.77 GB** of 4080 MiB, no CPU spill |
 
-It's both the most reliable model measured here and the fastest one served, so the reliability costs nothing.
+The most reliable model measured here is also among the fastest served.
 
 **Images from the same server:** SD-Turbo q8_0, 4 steps, 512×512 — about 2 GB resident, **3.04 GB peak** (the peak is [VAE decoding](glossary.md#g-vae), not sampling), about 50 s for the first call including model load and quantization, and about 44 s after. SD 1.5 fp16 at 20 steps also works, at 88 s.
 

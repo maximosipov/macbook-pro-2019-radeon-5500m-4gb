@@ -1,6 +1,6 @@
 # stable-diffusion.cpp
 
-Image generation on the same GPU stack. No source changes are needed, but two flags decide whether it works at all.
+Image generation on the same GPU stack. No source changes, but two flags decide whether it works.
 
 | | |
 |---|---|
@@ -16,7 +16,7 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 ## Overview
 
-The diffusion counterpart to llama.cpp: image and video generation on the same ggml backends, as one static binary with no Python.
+The diffusion counterpart to llama.cpp: one static binary, no Python.
 
 - **Modes** — text-to-image, image-to-image, inpainting, instruction-based editing, ESRGAN upscaling, and conversion of weights to GGUF or safetensors.
 - **Model families** — SD 1.x and 2.x, SDXL and their [Turbo](glossary.md#g-turbo) distillations, SD3 and 3.5, Flux, Qwen-Image, Chroma, Z-Image; editing models; video models. On 4 GB, the practical subset is the first group.
@@ -24,20 +24,18 @@ The diffusion counterpart to llama.cpp: image and video generation on the same g
 - **Memory controls** — on-the-fly quantization with `--type`, [TAESD](https://github.com/madebyollin/taesd) or CPU-side [VAE decoding](glossary.md#g-vae), and VAE tiling.
 - **Two binaries** — `sd-cli` for one-shot generation, and `sd-server` for an HTTP service that keeps the model loaded. The second matters here, because model loading and quantization dominate a 4-step generation.
 
-**Why it matters here:** this is the one workload where Metal doesn't merely underperform but fails outright — the macOS watchdog kills the command buffer before an image is finished. The same models are also reachable over an OpenAI-compatible images API through [LocalAI](localai.md#images).
+This is the one workload where Metal fails outright rather than merely underperforming: the macOS watchdog kills the command buffer before an image finishes. The same models are reachable over an OpenAI-compatible images API through [LocalAI](localai.md#images).
 
 ## Changes on this branch
 
-**None.** stable-diffusion.cpp builds cleanly for this hardware. The branch carries only a runbook.
-
-Everything needed is in the build and run flags, and two of them are load-bearing. Both produce *silently wrong output* when missing, which is why they're worth documenting:
+**None.** The branch carries only a runbook. Two flags are load-bearing, and both produce silently wrong output when missing:
 
 | Flag | Why |
 |---|---|
 | `-DGGML_METAL=OFF` at build time | `-DSD_METAL=OFF` alone still compiles Metal in, because ggml enables it on macOS by default. Metal then wins device 0 at runtime, and your "Vulkan" build silently runs Metal and times out ([known issue](README.md#ki-metal)). |
 | `--diffusion-conv-direct` at run time | Without it, the [UNet](glossary.md#g-unet) convolution is numerically broken on this stack and every image is colourful noise ([known issue](README.md#ki-diffusion-noise)). It is also about 3× faster. |
 
-Because this project vendors its own copy of ggml, the fixes from [ggml.md](ggml.md) aren't present in this build. They haven't been needed: MoltenVK 1.4.2 corrects the driver bug behind most of them, and the diffusion-specific defect is handled by `--diffusion-conv-direct`. Whether the integer-dot speed-up would also help diffusion here is untested.
+This project vendors its own ggml, so the fixes from [ggml.md](ggml.md) are absent. They are not needed: MoltenVK 1.4.2 corrects the driver bug behind most of them, and `--diffusion-conv-direct` handles the diffusion-specific defect. Whether the integer-dot speed-up would help diffusion here is untested.
 
 ## Build
 
@@ -98,15 +96,13 @@ Every command needs `--diffusion-conv-direct`.
   --steps 20 --cfg-scale 7 --sampling-method euler_a -W 512 -H 512 --seed 42 -o astronaut-sd15.png
 ```
 
-Model loading and on-the-fly quantization take about 30 seconds for SD-Turbo, which dominates a 4-step generation. Use `sd-server` to pay that cost once.
+Model loading and on-the-fly quantization take about 30 s for SD-Turbo, dominating a 4-step generation. `sd-server` pays that cost once.
 
 ## Verify
 
-**Looking like an image is not enough.** Generate the same prompt and seed on `--backend cpu` and compare the two images. The [failure mode](README.md#ki-diffusion-noise) this guards against also produces an image, just one made of noise.
+**Looking like an image is not enough.** Generate the same prompt and seed on `--backend cpu` and compare: the [failure mode](README.md#ki-diffusion-noise) this guards against also produces an image, just one made of noise.
 
-Verified on a fresh build: SD-Turbo q8_0, 4 steps, 512×512, seed 42, with `--diffusion-conv-direct` — a recognisable apple, **2049.08 MB** of parameters resident (text encoders 500.5, UNet 1388.9, VAE 159.7), and `generate_image` complete in **44.7 s**, of which **27.1 s was [VAE decoding](glossary.md#g-vae)**.
-
-That last split is worth remembering: in a 4-step turbo run, more time goes into decoding the latent image than into sampling it, and decoding is also where VRAM peaks.
+SD-Turbo q8_0, 4 steps, 512×512, seed 42, `--diffusion-conv-direct`: a recognisable apple, 2049.08 MB of parameters resident (text encoders 500.5, UNet 1388.9, VAE 159.7), `generate_image` complete in 44.7 s, of which 27.1 s was [VAE decoding](glossary.md#g-vae). In a 4-step run more time goes into decoding the latent than sampling it, and decoding is where VRAM peaks.
 
 ## Performance
 
@@ -127,11 +123,11 @@ Model fit and throughput:
 | SD 1.5 | fp16 | 2035 MB | ~3.4 | Baseline, 20 steps |
 | SDXL-Turbo | `--type q8_0 --vae-on-cpu` | **3836 MB** | ~9.3 | Fits, but tight against the 4278 MB usable |
 
-**Recommendation:** SD-Turbo at q8_0 for iterating, SDXL-Turbo at q8_0 with the VAE on the CPU for final images (clearly more photorealistic, about 5× slower per step, and at 4 steps it drops prompt details more often), and SD 1.5 when you need the [LoRA and ControlNet](glossary.md#g-lora) ecosystem.
+SD-Turbo at q8_0 for iterating; SDXL-Turbo at q8_0 with the VAE on the CPU for final images (about 5× slower per step, drops prompt details more often at 4 steps); SD 1.5 for the [LoRA and ControlNet](glossary.md#g-lora) ecosystem.
 
 ## Image quality
 
-Six prompts, one image each, at a fixed seed (42), 512x512, on all three models — the same run for every model, so the images are directly comparable. Prompt adherence is scored with [CLIP](glossary.md#g-clip) (`openai/clip-vit-base-patch32`, CLIPScore = 100 x cosine similarity); every image is published under [images/t2i/](images/t2i/).
+Six prompts, one image each, fixed seed (42), 512×512, all three models. Prompt adherence scored with [CLIP](glossary.md#g-clip) (`openai/clip-vit-base-patch32`, 100 × cosine similarity); images under [images/t2i/](images/t2i/).
 
 | Prompt | [SD-Turbo](images/t2i/) | [SD 1.5](images/t2i/) | [SDXL-Turbo](images/t2i/) |
 |---|---|---|---|
@@ -144,13 +140,13 @@ Six prompts, one image each, at a fixed seed (42), 512x512, on all three models 
 | **mean** | **33.84** | **34.08** | **34.20** |
 | **seconds per image** | **30–43** | 73–77 | 63–69 |
 
-**On prompt adherence the three models are tied.** The means sit within 0.4 points of each other, and each model wins different prompts: SD 1.5 takes three, SDXL-Turbo two, SD-Turbo one. There is no general quality ranking here to justify the slower models on adherence grounds.
+Prompt adherence is tied: the means sit within 0.4 points, and each model wins different prompts (SD 1.5 three, SDXL-Turbo two, SD-Turbo one).
 
-**Where they differ is per prompt, and sometimes dramatically.** The largest gap in the set is the astronaut: SD-Turbo scores 40.56 and SDXL-Turbo 30.54, because **SDXL-Turbo omits the horse entirely** and renders an astronaut standing on the moon. That is the "drops prompt detail at 4 steps and cfg 1" behaviour this page warns about, caught here with a matched pair — and CLIP scored it correctly, so the metric is doing real work rather than rewarding polish.
+Per-prompt gaps are large. The astronaut prompt is the widest: SD-Turbo 40.56 against SDXL-Turbo 30.54, because SDXL-Turbo omits the horse and renders an astronaut standing on the moon — the "drops prompt detail at 4 steps and cfg 1" behaviour, which CLIP scores correctly.
 
-**SD-Turbo is the better default than its reputation suggests.** It is 2x faster than the alternatives per image (30–43 s against 63–77 s), fits most comfortably in VRAM, and gives up nothing measurable in prompt adherence. Prefer SD 1.5 for portraits and interiors, where it scored highest, or when you need the [LoRA and ControlNet](glossary.md#g-lora) ecosystem; prefer SDXL-Turbo for texture-heavy natural subjects. Reach for none of them expecting a uniform quality upgrade.
+SD-Turbo is the default: 2× faster per image (30–43 s against 63–77 s), the most comfortable VRAM fit, and no measurable loss in adherence. Use SD 1.5 for portraits and interiors, or for the [LoRA and ControlNet](glossary.md#g-lora) ecosystem; SDXL-Turbo for texture-heavy natural subjects.
 
-*The per-step figures in [Performance](#performance) are sampling only; the seconds here are end to end, including model load and on-the-fly quantization, which dominate a 4-step run.*
+*Per-step figures in [Performance](#performance) are sampling only; the seconds here are end to end, including model load and quantization.*
 
 ## Troubleshooting
 

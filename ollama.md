@@ -1,6 +1,6 @@
 # ollama
 
-The friendliest way to run models locally, and the one most likely to be someone's first install. Upstream ships no Vulkan runner for macOS; this fork builds one.
+Model manager and always-on server. Upstream ships no Vulkan runner for macOS; this fork builds one.
 
 | | |
 |---|---|
@@ -16,7 +16,7 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 ## Overview
 
-ollama is closer to Docker for models than to a chat program:
+Closer to Docker for models than to a chat program:
 
 - **Model lifecycle** — `ollama pull`, `run`, `create`, `list`, `ps`, `rm`, `push`, a public registry, and content-addressed blob storage shared between models.
 - **`Modelfile`** — a small declarative recipe (`FROM` a base model or a local GGUF, plus `SYSTEM`, `TEMPLATE`, `PARAMETER` and adapters) that turns weights into a named, reusable model.
@@ -24,7 +24,7 @@ ollama is closer to Docker for models than to a chat program:
 - **Two APIs** — its own REST API (`/api/generate`, `/api/chat`, `/api/embed`, …) and an [OpenAI-compatible](glossary.md#g-openai-api) `/v1` surface, with tool calling, structured output, embeddings and [vision](glossary.md#g-vlm).
 - **A desktop app** for macOS and Windows, with a chat UI and settings.
 
-**Why it matters here:** the official macOS build ships no Vulkan runner, so this machine's Radeon appears as `id=cpu` ([ollama#13127](https://github.com/ollama/ollama/issues/13127)) and you get CPU speed. This branch builds the runner upstream doesn't ship, at 71 tok/s on the GPU against 24 on the CPU.
+On the official macOS build the Radeon appears as `id=cpu` ([ollama#13127](https://github.com/ollama/ollama/issues/13127)) and you get CPU speed. This branch builds the missing runner: 71 tok/s on the GPU against 24 on the CPU.
 
 ## Changes on this branch
 
@@ -40,7 +40,7 @@ Five patches, on top of the cherry-picked llama.cpp fixes:
 
 ## Build
 
-ollama vendors a *pinned* llama.cpp commit, and its compatibility patches are written against that exact commit, so you can't build against the fork's branch tip. Check out the pinned commit and cherry-pick the [ten fix commits](llama.cpp.md#changes-on-this-branch) onto it.
+ollama vendors a pinned llama.cpp commit and its compatibility patches are written against it, so the fork's branch tip will not build. Check out the pin and cherry-pick the [ten fix commits](llama.cpp.md#changes-on-this-branch).
 
 > If you cloned this repository recursively, the ollama fork is already at `ollama/`, and you can use it in place of the `ollama-radeon` clone below. The `llama.cpp/` submodule is **not** a substitute for the `llama.cpp-radeon` checkout: it sits at the branch tip, and this build needs a tree at ollama's pin with the ten commits cherry-picked onto it.
 
@@ -65,9 +65,9 @@ cp -R llama.cpp-radeon llama.cpp-radeon-ollama
   git apply ../ollama-radeon/llama/compat/*.patch ../ollama-radeon/llama/compat/models/*.patch )
 ```
 
-All ten commits cherry-pick cleanly onto ollama's current pin, and the compatibility patches still apply on top.
+All ten cherry-pick cleanly onto the current pin, and the compatibility patches apply on top.
 
-Then build. ollama's CMake doesn't pass `-DVulkan_*` into its nested llama.cpp build, so the way to point it at MoltenVK is a fake "Vulkan SDK" made of symlinks, which `FindVulkan` picks up through `$VULKAN_SDK`:
+ollama's CMake does not pass `-DVulkan_*` into its nested llama.cpp build, so point it at MoltenVK with a fake "Vulkan SDK" of symlinks, which `FindVulkan` picks up through `$VULKAN_SDK`:
 
 ```bash
 cd ollama-radeon
@@ -90,9 +90,9 @@ cmake --build build --config Release --parallel "$(sysctl -n hw.ncpu)"
 CGO_ENABLED=1 go build -o build/ollama .
 ```
 
-The `vk_video` symlink is not optional: current `vulkan_core.h` includes `vk_video/vulkan_video_codec_h264std.h`, and without it the nested build fails with a header-not-found error several hundred lines into the log.
+The `vk_video` symlink is required: current `vulkan_core.h` includes `vk_video/vulkan_video_codec_h264std.h`, and without it the nested build fails several hundred lines into the log.
 
-**Desktop app and DMG.** Needed to see the GPU slider and the raw-protocol tab, and a further half-page of `npm run build`, bundle assembly, relinking for Vulkan self-containment and ad-hoc code signing. See [part 2 of the branch runbook](https://github.com/maximosipov/ollama/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md#part-2--desktop-app--dmg-needed-to-see-the-gpu-slider-and-raw-protocol-tab).
+**Desktop app and DMG** (needed for the GPU slider and raw-protocol tab): `npm run build`, bundle assembly, relinking for Vulkan self-containment and ad-hoc signing — see [part 2 of the branch runbook](https://github.com/maximosipov/ollama/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md#part-2--desktop-app--dmg-needed-to-see-the-gpu-slider-and-raw-protocol-tab).
 
 ## Run
 
@@ -115,7 +115,7 @@ export OLLAMA_HOST=127.0.0.1:11435
 ./build/ollama ps         # PROCESSOR must read 100% GPU
 ```
 
-If it reads any share of CPU, the model didn't fit or the device index is wrong. Confirm VRAM use independently:
+Any share of CPU means the model did not fit or the device index is wrong. Confirm VRAM use independently:
 
 ```bash
 ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
@@ -141,28 +141,26 @@ curl -s http://127.0.0.1:11435/api/generate -d '{
 | Qwen3-VL-4B vision, upstream default of 1024 | 8.3–15.3 tok/s, decaying across requests |
 | Qwen3-VL-4B, VRAM | 3.2–3.6 GiB of 4080 MiB, no CPU spill |
 
-The 64 tok/s figure is a single run on the rebuilt binary with `OLLAMA_FLASH_ATTENTION=1`; 67 is the earlier figure. The vision rows predate the rebuild and were taken with flash attention off.
-
-Device choice, same model and build — the reason for pinning the device:
+Device choice, same model and build:
 
 | Device | Generation |
 |---|---|
 | AMD Radeon Pro 5500M | **71 tok/s** |
 | CPU | 24 tok/s |
 
-The CPU is the only fallback worth having. The Intel GPU is excluded by the pin and is not a third option.
+The CPU is the only fallback; the Intel GPU is excluded by the pin.
 
 ## Troubleshooting
 
-**The Radeon shows up as `id=cpu`.** You're on an official build with no Vulkan runner. Build this fork.
+**The Radeon shows up as `id=cpu`.** An official build with no Vulkan runner; build this fork.
 
-**Output is gibberish.** The device index is wrong. Confirm `GGML_VK_VISIBLE_DEVICES=0`, and that you're running a binary built with the `vulkan-visible-device-index` patch.
+**Output is gibberish.** Wrong device index. Confirm `GGML_VK_VISIBLE_DEVICES=0` and that the binary carries the `vulkan-visible-device-index` patch.
 
 **Vision throughput collapses over several requests.** Set `OLLAMA_IMAGE_MIN_TOKENS=512`.
 
 **The nested build fails on a missing `vulkan_video_codec_h264std.h`.** The `vk_video` symlink is missing from the fake SDK.
 
-**A model runs partly on the CPU.** Force full offload per request with `"options": {"num_gpu": 999}`, or globally with `OLLAMA_GPU_PERCENT=100` or the desktop slider. If it still spills, the model plus its context doesn't fit in 4 GB.
+**A model runs partly on the CPU.** Force full offload with `"options": {"num_gpu": 999}`, `OLLAMA_GPU_PERCENT=100`, or the desktop slider. If it still spills, the model plus its context does not fit in 4 GB.
 
 ## Reference
 

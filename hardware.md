@@ -1,6 +1,6 @@
 # The GPU: capabilities and limits
 
-What ggml reports about the Radeon Pro 5500M, what each field means for the code paths it takes, and where this card sits among AMD's GPU generations.
+What ggml reports about the Radeon Pro 5500M, what each field changes, and where this card sits among AMD's generations.
 
 - [Reading the capability line](#reading-the-capability-line)
 - [RDNA generations](#rdna-generations)
@@ -13,9 +13,9 @@ Every ggml tool prints this banner for each device it finds:
 uma: 0 · fp16: 1 · bf16: 0 · fp4: 0 · int dot: 0 · matrix cores: none · warp size: 32
 ```
 
-It's worth reading carefully, because a `0` means one of two very different things: *the silicon doesn't have this*, or *Metal can't express what the silicon has*. Only the second kind can be reclaimed in software.
+A `0` means one of two things: the silicon lacks the feature, or Metal cannot express what the silicon has. Only the second is reclaimable in software.
 
-Validated against the hardware and against what MoltenVK reports (device `0x7340`, Navi 14 / gfx1012, PCIe x16, 4 GB dedicated):
+Validated against the hardware and MoltenVK's own report (device `0x7340`, Navi 14 / gfx1012, PCIe x16, 4 GB dedicated):
 
 | Field | What the driver reports | Verdict |
 |---|---|---|
@@ -26,20 +26,17 @@ Validated against the hardware and against what MoltenVK reports (device `0x7340
 | `matrix cores: none` | `VK_KHR_cooperative_matrix` absent | **Silicon.** No tensor-core-class instructions, so there's no fast kernel for `--diffusion-fa`. |
 | `warp size: 32` | 1.4.2 reports `subgroupSize 32`; **1.4.1 and earlier said 64** | **Driver bug, fixed.** Never a ceiling: MoltenVK was misreporting a 32-wide SIMD group as 64, which broke every subgroup shader. |
 
-Two traps in reading that line:
+The banner is the driver's raw report, not the backend's decisions: a build with the integer-dot fix active still prints `int dot: 0`, and only prefill throughput shows it is live (about 59 pp512 on a 4B Q4_K_M against about 35). `warp size` does move, and is the check for MoltenVK 1.4.2 or later.
 
-- **The banner comes from the driver's raw report, not from what the backend then decided.** A build with the integer-dot fix active still prints `int dot: 0`. The only way to see that path is live is prefill throughput: about 59 pp512 on a 4B Q4_K_M, rather than about 35.
-- **`warp size` is the field that does move,** which makes it your check that you're on MoltenVK 1.4.2 or later.
-
-`VK_AMD_shader_core_properties` is also absent, which is why ggml's AMD architecture detection falls through to `OTHER` on macOS and skips every RDNA-specific tuning path. That's what the `GGML_VK_FORCE_ARCH` override on the [llama.cpp fork](llama.cpp.md#reference) is for.
+`VK_AMD_shader_core_properties` is absent, so ggml's AMD architecture detection falls through to `OTHER` on macOS and skips every RDNA-specific tuning path — the reason for the `GGML_VK_FORCE_ARCH` override on the [llama.cpp fork](llama.cpp.md#reference).
 
 ## RDNA generations
 
-Three rows in the table above are marked **Silicon**, which means "no fix exists *for this chip*", not "no fix exists". A later GPU generation supplies two of them outright. This section is where this card sits in AMD's line, and what each step up would actually buy.
+Three rows above are marked **Silicon**, meaning no fix exists for this chip; a later generation supplies two of them outright.
 
-> The details in this section come from vendor documentation rather than from measurements on this machine, unlike the rest of this repository.
+> This section comes from vendor documentation, not from measurements on this machine.
 
-AMD splits its GPUs into two families: **RDNA** for graphics parts (this card) and **CDNA** for datacentre compute. Matrix and bf16 features arrive in the two lines at different times, which is why bf16 support is described as arriving with either CDNA1 or RDNA3.
+AMD splits its GPUs into **RDNA** (graphics, this card) and **CDNA** (datacentre compute). Matrix and bf16 features arrive in the two lines at different times, which is why bf16 is described as arriving with either CDNA1 or RDNA3.
 
 | Generation | Shipped | Representative parts | `fp16` | `bf16` | `int dot` | `matrix cores` |
 |---|---|---|---|---|---|---|
@@ -55,6 +52,6 @@ AMD splits its GPUs into two families: **RDNA** for graphics parts (this card) a
 - **RDNA 3.5** is an integrated-graphics refresh with the same feature set. Note that these report `uma: 1`, putting them in the opposite regime from this card: no PCIe copies, but no dedicated VRAM either.
 - **RDNA 4** roughly doubles matrix throughput per compute unit against RDNA 3 and adds FP8 to the matrix path. FP4 and FP6 remain datacentre features, which is why the `fp4` field reads `0` on everything in this table.
 
-**What this means if you're shopping.** Two of this repository's [known issues](README.md#known-issues) are architectural rather than driver bugs, and RDNA 3 answers both: no matrix cores and no bf16. The third architectural limit, 4 GB, is answered by any card with more of it.
+Two of this repository's [known issues](README.md#known-issues) are architectural rather than driver bugs, and RDNA 3 answers both: matrix cores and bf16. The third, 4 GB, is answered by any larger card.
 
-But none of that is reachable *on a Mac*. macOS tops out at RDNA 2, and MoltenVK would still be translating to Metal, which has no DP4a-style instruction and no cooperative-matrix extension regardless of what the silicon underneath supports. **On this hardware the ceiling is the API, not only the chip** — which is why the fixes on these branches are keyed to the MoltenVK driver rather than to the GPU.
+None of that is reachable on a Mac: macOS tops out at RDNA 2, and MoltenVK still translates to Metal, which has no DP4a-style instruction and no cooperative-matrix extension regardless of the silicon. The ceiling here is the API as much as the chip, which is why the fixes are keyed to the MoltenVK driver rather than to the GPU.

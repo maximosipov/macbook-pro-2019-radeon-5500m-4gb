@@ -1,6 +1,6 @@
 # LocalAI model configs
 
-Ready-to-use LocalAI model YAML files for the models this repository recommends, with the settings this hardware needs. Background: [localai.md](../localai.md) for the server, [models.md](../models.md) for why these models.
+LocalAI model YAML files for the recommended models, with the settings this hardware needs. Server setup: [localai.md](../localai.md). Model choice: [models.md](../models.md).
 
 | File | Model | Context | Notes |
 |---|---|---|---|
@@ -14,17 +14,17 @@ Ready-to-use LocalAI model YAML files for the models this repository recommends,
 
 ## Install
 
-Copy the files into LocalAI's models folder. With the menu-bar app that is:
+Copy into LocalAI's models folder — with the menu-bar app:
 
 ```bash
 cp *.yaml ~/Library/Application\ Support/LocalAI/models/
 ```
 
-Then restart the server (Restart in the menu-bar icon), and the models appear in `/v1/models`.
+Restart the server from the menu-bar icon; the models appear in `/v1/models`.
 
 ## Weights
 
-The YAML files reference weights by filename, and **the weights must live inside the models folder**: LocalAI rejects a path outside it, and the model then silently doesn't appear. A symlink satisfies it.
+Weights are referenced by filename and must live inside the models folder: LocalAI rejects a path outside it and the model then silently does not appear. A symlink satisfies this.
 
 | Config expects | Get it from |
 |---|---|
@@ -42,7 +42,7 @@ ln -s /path/to/weights.gguf ~/Library/Application\ Support/LocalAI/models/
 
 ## The settings, and why
 
-Every text config carries the same five, and none of them is a tuning preference:
+Every text config carries the same five settings:
 
 | Setting | Why |
 |---|---|
@@ -52,11 +52,11 @@ Every text config carries the same five, and none of them is a tuning preference
 | `context_size` | Sized per model from its measured [context ceiling](../models.md#context-ceilings), leaving room for the weights in 4 GB. |
 | `f16: true` | Standard for GGUF weights here. |
 
-The image configs all set `diffusion_conv_direct:true`, which is **required for correctness**, not speed: without it every image is [colourful noise](../README.md#ki-diffusion-noise). SDXL additionally needs `keep_vae_on_cpu:true`, because VRAM peaks during VAE decoding and it won't fit otherwise.
+The image configs set `diffusion_conv_direct:true`, required for correctness rather than speed: without it every image is [colourful noise](../README.md#ki-diffusion-noise). SDXL also needs `keep_vae_on_cpu:true`, since VRAM peaks during VAE decoding.
 
 ## Verified
 
-Every config in this folder was run through LocalAI on the target machine, each in its **own** server session, over the OpenAI-compatible API. Text models were asked an arithmetic question (checked for the right answer), then three 128-token generations for throughput.
+Each config was run through LocalAI on the target machine in its own server session, over the OpenAI-compatible API: an arithmetic question checked for the right answer, then three 128-token generations for throughput.
 
 | Config | Result | VRAM | Warm throughput |
 |---|---|---|---|
@@ -68,14 +68,14 @@ Every config in this folder was run through LocalAI on the target machine, each 
 | `sd-1.5` | Recognisable apple, not noise | — | 80.7 s at 20 steps, first call |
 | `sdxl-turbo` | Recognisable apple, not noise | — | 221.9 s, first call |
 
-Notes on what these numbers are and aren't:
+Notes:
 
-- **Image VRAM was not measured.** The probe sampled after generation finished, by which point the backend had released the memory. The figures in [models.md](../models.md#image-models) come from a proper measurement during the run.
-- **Image timings are first-call, cold**, and include model load and on-the-fly quantization, which dominate a 4-step generation. A warm server is much faster per image.
-- **Text throughput is a warm, sustained-serving figure,** which is the most reproducible measurement on this machine. The first of each three is still partly cold.
-- The image models each needed their backend started with `SD_LIBRARY` and the MoltenVK environment set. The menu-bar app does this itself; a hand-rolled server needs the [wrapper script](../localai.md#images).
+- Image VRAM is not listed: the probe sampled after generation, once the backend had released the memory. Use the figures in [models.md](../models.md#image-models).
+- Image timings are cold first-call, including model load and quantization, which dominate a 4-step generation.
+- Text throughput is warm sustained serving, the most reproducible measurement on this machine; the first of each three is still partly cold.
+- The image backends need `SD_LIBRARY` and the MoltenVK environment set. The menu-bar app does this; a hand-rolled server needs the [wrapper script](../localai.md#images).
 
 ## Two rules for a 4 GB card
 
-1. **One model per server session.** A model loaded after another returns empty completions with no error. To switch models, restart the server. See [localai.md](../localai.md#troubleshooting).
-2. **Give thinking models room.** Qwen3.5 and LFM2.5 emit a reasoning preamble; `content` stays empty until that block closes, and the text arrives in `message.reasoning`. With a small `max_tokens` you get an empty answer that looks like a failure and isn't. Both configs carry a commented-out `chat_template_kwargs` block to turn thinking off.
+1. **One model per server session.** A model loaded after another returns empty completions with no error; restart the server to switch. See [localai.md](../localai.md#troubleshooting).
+2. **Give thinking models room.** Qwen3.5 and LFM2.5 emit a reasoning preamble, so `content` stays empty until the block closes and the text arrives in `message.reasoning`. A small `max_tokens` yields an empty answer. Both configs carry a commented-out `chat_template_kwargs` block to disable thinking.

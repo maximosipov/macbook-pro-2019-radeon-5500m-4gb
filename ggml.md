@@ -1,6 +1,6 @@
 # ggml
 
-The tensor library underneath every other tool here, and the place where GPU bugs are found and fixed.
+The tensor library underneath every other tool here, and where GPU bugs are found and fixed.
 
 | | |
 |---|---|
@@ -16,20 +16,20 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 ## Overview
 
-ggml is a tensor library in plain C with no dependencies. It is not an application; it provides the parts a runtime is built from:
+Plain C, no dependencies, not an application. It provides the parts a runtime is built from:
 
 - **Tensor operations and the compute graph** — matrix multiplication, attention (`FLASH_ATTN_EXT`), convolution, normalization, RoPE, and the recurrent operations (`SSM_SCAN`, `GATED_DELTA_NET`) that hybrid models need. A model is a graph of these operations.
-- **The backend system** — CPU, [Vulkan](glossary.md#g-vulkan), Metal, CUDA, HIP, SYCL, OpenCL, BLAS and RPC. A scheduler splits the graph across the available devices, and falls back to the CPU for any operation a backend doesn't implement. This is why a broken shader degrades quietly instead of failing loudly.
+- **The backend system** — CPU, [Vulkan](glossary.md#g-vulkan), Metal, CUDA, HIP, SYCL, OpenCL, BLAS, RPC. A scheduler splits the graph across devices and falls back to the CPU for unimplemented operations, which is why a broken shader degrades quietly rather than failing loudly.
 - **[GGUF](glossary.md#g-ggml) and quantization** — the model file format, the k-quant and i-quant implementations such as [`Q4_K_M`](glossary.md#g-quant), and the dequantization kernels each backend needs.
 - **[`test-backend-ops`](glossary.md#g-test-backend-ops)** — a differential tester that runs each operation on a backend and compares the result against the CPU.
 
-**Why it matters here:** the GPU code lives in ggml, so all the correctness fixes are made in its Vulkan backend. `test-backend-ops` is the only tool that will tell you *which* operation is returning wrong values. It turns "this model is broken" into "`SSM_SCAN` returns NaN" in about a minute. Fixes made here propagate to llama.cpp, ollama and LocalAI.
+All correctness fixes are made in the Vulkan backend here, and propagate to llama.cpp, ollama and LocalAI. `test-backend-ops` is the only tool that identifies *which* operation returns wrong values.
 
 ## Changes on this branch
 
-Nine commits, touching `ggml-vulkan.cpp` and three `.comp` shaders. All are conditional on the MoltenVK driver, so they do nothing on GPUs where subgroup operations behave as specified (native Vulkan on AMD or NVIDIA, or Mesa).
+Nine commits in `ggml-vulkan.cpp` and three `.comp` shaders, all conditional on the MoltenVK driver: they are no-ops where subgroup operations behave as specified (native Vulkan on AMD or NVIDIA, Mesa).
 
-**Correctness** — each of these produced wrong output rather than a crash:
+**Correctness** — each produced wrong output rather than a crash:
 
 | Commit | What it fixes |
 |---|---|
@@ -39,7 +39,7 @@ Nine commits, touching `ggml-vulkan.cpp` and three `.comp` shaders. All are cond
 | `do not use mul_mat_vecq for q8_0 on MoltenVK` | The multi-column variant is wrong for q8_0 (error near 1.0), while the single-column and `mul_mmq` paths are correct. MoltenVK 1.4.2 doesn't fix this, so the guard is unconditional. |
 | `keep q8_0 off the flash-attention MMQ path…` | The same defect in a second place. See [Troubleshooting](#troubleshooting). |
 
-Both q8_0 defects have the same root cause: the affected shaders repack through `pack32(i16vec2(...))` from a 16-bit view, which MoltenVK mistranslates. Every other quantization type packs from `u16vec2` and is unaffected.
+Both q8_0 defects share a root cause: the affected shaders repack through `pack32(i16vec2(...))` from a 16-bit view, which MoltenVK mistranslates. Every other quantization type packs from `u16vec2`.
 
 **Performance:**
 
@@ -100,9 +100,9 @@ cmake --build build --config Release -j"$(sysctl -n hw.ncpu)"
 
 ## Verify
 
-**Read the case counts, not the `OK`.** An unsupported operation is *skipped*, and a backend where every case was skipped still prints a green `OK`. That is exactly how the flash-attention CPU fallback stayed hidden: `-o FLASH_ATTN_EXT` looked like it passed, while `support -o FLASH_ATTN_EXT` reported 0 of 5097 cases supported.
+**Read the case counts, not the `OK`.** An unsupported operation is skipped, and a backend where every case was skipped still prints a green `OK`. Use `test-backend-ops support -o <OP>` to confirm an operation runs on the GPU at all.
 
-On the branch tip with MoltenVK 1.4.2, the Radeon passes everything it runs:
+On the branch tip with MoltenVK 1.4.2:
 
 | Operation | Result |
 |---|---|
@@ -112,13 +112,11 @@ On the branch tip with MoltenVK 1.4.2, the Radeon passes everything it runs:
 | `FLASH_ATTN_EXT` | 4757 / 4757 |
 | Full sweep | **15426 / 15426, zero failures** |
 
-A further ~3276 cases report `not supported` and are skipped. That's normal: they are operations or type combinations the Vulkan backend doesn't implement and hands to the CPU.
-
-Case totals move as upstream changes, so compare any failure count against a baseline you produced the same day, not against a number quoted in a document.
+A further ~3276 cases report `not supported` and are skipped: operations or type combinations the Vulkan backend hands to the CPU. Case totals move with upstream, so compare failures against a same-day baseline.
 
 ## Performance
 
-`test-backend-ops perf` gives per-operation timings, but the results that matter are visible at the model level. Measured through llama.cpp on a 4B Q4_K_M model:
+`test-backend-ops perf` gives per-operation timings; the model-level effect, measured through llama.cpp on a 4B Q4_K_M model:
 
 | Change | Effect |
 |---|---|
@@ -130,13 +128,13 @@ See [benchmarking.md](benchmarking.md) before comparing any two numbers from thi
 
 ## Troubleshooting
 
-**A model produces gibberish or NaN.** Run `test-backend-ops -b Vulkan0` before blaming the model. A shader bug surfaces three layers away as "this model is broken".
+**A model produces gibberish or NaN.** Run `test-backend-ops -b Vulkan0` before blaming the model: a shader bug surfaces three layers away as "this model is broken".
 
 **An operation reports `OK` but is slow.** Check `test-backend-ops support -o <OP> -b Vulkan0`. If no case is supported, ggml is running that operation on the CPU.
 
-**The Intel UHD 630 still fails on MoltenVK 1.4.2.** `mvk_subgroups_trustworthy()` switches the subgroup workarounds off from driver 1.4.2 onward for every device. That conclusion was reached on the Radeon and does not hold for the Intel GPU, which still fails `SSM_SCAN` and `GATED_DELTA_NET` there. Keep the Intel GPU pinned out with `GGML_VK_VISIBLE_DEVICES`; if anything must run on it, force the workarounds back on with `GGML_VK_FORCE_MOLTENVK_WORKAROUNDS=1`.
+**The Intel UHD 630 fails on MoltenVK 1.4.2.** `mvk_subgroups_trustworthy()` disables the subgroup workarounds from driver 1.4.2 for every device, which holds for the Radeon but not for the Intel GPU, where `SSM_SCAN` and `GATED_DELTA_NET` still fail. Keep it pinned out with `GGML_VK_VISIBLE_DEVICES`, or force the workarounds on with `GGML_VK_FORCE_MOLTENVK_WORKAROUNDS=1`.
 
-**A performance patch can turn a correct path into a fast, wrong one.** This branch did exactly that. Enabling integer dot made `ggml_vk_fa_scalar_uses_mmq` accept q8_0, which routed the q8_0 KV cache onto a block loader MoltenVK mistranslates. Upstream, that path was never reached and q8_0 was correct but slower. The result was 337 `FLASH_ATTN_EXT` failures with an error of 0.04–0.09, all with `type_K=q8_0`, while q8_0 passed every other operation. Only a per-operation differential test catches this class of bug.
+**A performance patch can turn a correct path into a fast, wrong one.** Enabling integer dot made `ggml_vk_fa_scalar_uses_mmq` accept q8_0, routing the q8_0 KV cache onto a block loader MoltenVK mistranslates — 337 `FLASH_ATTN_EXT` failures at error 0.04–0.09, while q8_0 passed every other operation. This is why the q8_0 guards exist, and why a per-operation differential test is run after any performance change.
 
 ## Reference
 

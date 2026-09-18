@@ -7,24 +7,23 @@ How to get numbers from this laptop that mean something, and how every measureme
 - [Speed and fit instruments](#speed-and-fit-instruments)
 - [Capability benchmarks](#capability-benchmarks)
 - [Long-context benchmarks](#long-context-benchmarks)
-- [Superseded results](#superseded-results)
 
 ## Why this machine lies to you
 
-This is a 2019 laptop, and it will mislead you if you let it. The same binary, model and flags produced **10.5, 24.9 and 33.9 tok/s** across three sessions. None of those runs was faulty; they were different machine states. Three effects, in order of size:
+The same binary, model and flags produce 10.5, 24.9 or 33.9 tok/s depending on machine state. Three effects, in order of size:
 
-**1. GPU clock state — dominant, about 2.4×.** [`ioreg`](glossary.md#g-ioreg) reports the Radeon idling at **10 MHz**, and `llama-bench`'s single warm-up pass doesn't spin it up. Back to back, with the same binary and flags:
+**1. GPU clock state — about 2.4×.** [`ioreg`](glossary.md#g-ioreg) reports the Radeon idling at 10 MHz, and `llama-bench`'s single warm-up pass does not spin it up. Same binary and flags, back to back:
 
 | GPU | CPU | tg128 |
 |---|---|---|
 | Warm (straight off a serving workload) | **throttled to 30** | **24.92 ± 8.10** |
 | Cold (after cooling to 100) | unthrottled | 10.49 ± 0.11 |
 
-The run on the *throttled* CPU is 2.4× faster. Cooling the machine to avoid CPU throttling parks the GPU, so the intuitive benchmarking hygiene is backwards here.
+The run on the throttled CPU is 2.4× faster: cooling the machine parks the GPU, so the usual benchmarking hygiene is counterproductive here.
 
-**2. Position within a multi-configuration run.** `llama-bench -fa 0,1` gives the first configuration a different machine than the second. That alone produced an apparent 3.9× flash-attention penalty that a [counterbalanced](glossary.md#g-counterbalance) experiment put at 2.27×.
+**2. Position within a multi-configuration run.** `llama-bench -fa 0,1` gives the first configuration a different machine state than the second, enough to turn a 2.27× difference into an apparent 3.9× one.
 
-**3. [CPU thermal throttling](glossary.md#g-throttle).** `CPU_Speed_Limit` falls to 20–36 within about two minutes of load. Real, but smaller than the GPU effect, and it points the other way.
+**3. [CPU thermal throttling](glossary.md#g-throttle).** `CPU_Speed_Limit` falls to 20–36 within about two minutes of load — smaller than the GPU effect, and in the opposite direction.
 
 ### The rules that follow
 
@@ -35,7 +34,7 @@ The run on the *throttled* CPU is 2.4× faster. Cooling the machine to avoid CPU
 - **Never difference two tables produced on different days.** Answer configuration questions with an A/B run.
 - **For "what will I actually get", measure sustained serving,** not micro-benchmarks. LocalAI serving Qwen3-4B-2507 returned 27.1 / 27.9 / 28.4 tok/s across three runs — tighter than any `llama-bench` figure on this machine.
 
-Two caveats, both learned the hard way. A warm-up pass **is not free**: adding one triggered [`vk::DeviceLostError`](glossary.md#g-device-lost) on Qwen3.5-4B, so a more representative number also means a less likely finish. And watch for **orphaned benchmark processes**: one outlived a `pkill` of its parent script and held the machine at `CPU_Speed_Limit=36` while the next run sat in a cooldown loop, waiting for a machine that another process was busy heating.
+Two caveats: a warm-up pass can trigger [`vk::DeviceLostError`](glossary.md#g-device-lost) on Qwen3.5-4B, so a more representative number is also a less likely finish; and an orphaned benchmark process can survive a `pkill` of its parent script and hold the machine at `CPU_Speed_Limit=36` while the next run waits to cool.
 
 ## Correctness instruments
 
@@ -45,17 +44,17 @@ Runs every ggml operation on a backend with random inputs and compares the resul
 
 **Score:** a count of passing cases. A FAIL is a real bug, since the comparison is against the same computation on the CPU.
 
-Two reading rules, both learned here. A case reported `not supported` is **skipped, not passed** — and a backend where every case is skipped still prints a green `OK`, which is how the flash-attention CPU fallback hid for months. And the case totals move with upstream, so compare failures against a same-day baseline rather than a count quoted in a document.
+Two reading rules: a case reported `not supported` is skipped, not passed, and a backend where every case is skipped still prints a green `OK`; and case totals move with upstream, so compare failures against a same-day baseline rather than a quoted count.
 
-This is the only instrument here that localizes a bug to a specific shader. Everything else just tells you something is wrong. Usage: [ggml.md](ggml.md#run).
+This is the only instrument here that localises a bug to a specific shader. Usage: [ggml.md](ggml.md#run).
 
 ### Text correctness battery
 
-Four deterministic prompts (arithmetic, factual recall, sequence continuation and string reversal) at temperature 0, scored on the final answer. It also computes a **4-gram repetition ratio** over the output, which is what actually catches [MoltenVK garbage](glossary.md#g-nan): broken GPU output is usually fluent-looking loops rather than wrong answers.
+Four deterministic prompts (arithmetic, factual recall, sequence continuation, string reversal) at temperature 0, scored on the final answer, plus a 4-gram repetition ratio. The repetition ratio is what catches [MoltenVK garbage](glossary.md#g-nan), since broken GPU output is usually fluent loops rather than wrong answers.
 
-**Score:** *n*/4 correct, with the repetition ratio as a separate pass/fail gate. It measures *coherence, not capability*: 4/4 means the model is running correctly, not that it's any good.
+**Score:** *n*/4 correct, with the repetition ratio as a separate gate. It measures coherence, not capability.
 
-One artifact to know: the exact-match factual scorer keys off the `[Start thinking]` or `<think>` preamble that `llama-cli` leaves in the output, so reasoning models can report `OVERALL: FAIL` while the repetition gate still passes. Coherence is real there; only the matcher is fooled.
+Artifact: the exact-match scorer keys off the `[Start thinking]` or `<think>` preamble `llama-cli` leaves in the output, so reasoning models report `OVERALL: FAIL` while the repetition gate passes.
 
 ### Vision evaluation
 
@@ -113,11 +112,11 @@ Results are **staged locally and not published**. A submission publishes device 
 
 ## Capability benchmarks
 
-All were run over `llama-server`'s OpenAI endpoint at temperature 0, on Q4_K_M weights, with small samples chosen to fit this machine's patience. **They rank these models against each other under one protocol; they are not comparable to published leaderboard numbers.** Results: [models.md](models.md#capability-scores).
+Run over `llama-server`'s OpenAI endpoint at temperature 0 on Q4_K_M weights, with small samples. They rank these models against each other under one protocol and are not comparable to published leaderboard numbers. Results: [models.md](models.md#capability-scores).
 
-**Thinking is disabled** for the comparison, for two reasons. Several of these models default to emitting a `<think>` block, which (a) makes every generation many times longer, which is untenable across a set of models on a thermally limited card, and (b) *breaks* IFBench, whose verifiers grade the raw response — a reasoning preamble violates "respond with exactly N bullets". Models are served with `--reasoning-format deepseek`, which moves any think block into a separate `reasoning_content` field and leaves the graded `content` clean, plus `--chat-template-kwargs '{"enable_thinking":false}'` where the template accepts it.
+Thinking is disabled: a `<think>` block makes every generation many times longer, and it breaks IFBench, whose verifiers grade the raw response. Models are served with `--reasoning-format deepseek`, which moves any think block into `reasoning_content`, plus `--chat-template-kwargs '{"enable_thinking":false}'` where the template accepts it.
 
-One convention applies throughout: a request that exceeds the **400 s client timeout** is recorded as `timeout`, meaning no answer was produced and nothing was graded. A timeout and a wrong answer are different failures and are never averaged together.
+A request that exceeds the client timeout is recorded as `timeout` — no answer produced, nothing graded. Timeouts and wrong answers are never averaged together.
 
 | Benchmark | What it measures | Scoring |
 |---|---|---|
@@ -132,32 +131,18 @@ One convention applies throughout: a request that exceeds the **400 s client tim
 
 ### Long-context benchmarks
 
-LongBench-v2 and MRCR are run at ctx 32768 with the KV precision each model needs to fit, and **time to response is recorded per item** — on this card it ranges from 114 s to over 20 minutes, so it is a result in its own right rather than overhead.
+LongBench-v2 and MRCR run at ctx 32768 with the KV precision each model needs to fit. Time to response is recorded per item; it ranges from 114 s to over 20 minutes here, so it is a result rather than overhead.
 
-Three things had to be fixed before these benchmarks measured anything. Every earlier long-context number on this page is affected by at least one of them:
+Three harness settings are load-bearing on this hardware, each of which silently converts a real result into a zero:
 
-- **The 400-second client timeout was shorter than the work.** A 19K-token MRCR item takes 200–1300 s here. One item that the old limit recorded as `timeout` in fact scores **0.896** when allowed to finish. The limits are now 1800 s (LongBench) and 2400 s (MRCR).
-- **The answer budget was 24 tokens.** A reasoning model spends that inside its think block and returns empty content, scoring 0 by construction. Raised to 1024.
-- **Only `content` was graded.** Models served with `--reasoning-format deepseek` put their answer in `reasoning_content` while `content` stays empty — the same root cause as the GPQA unparsed-rate caveat. Both benchmarks now read either channel, and LongBench reports an explicit `unparsed` count so this failure can never again be mistaken for a wrong answer.
+- **Client timeout.** A 19K-token MRCR item takes 200–1300 s; one takes 1159 s and scores 0.896. The limits are 1800 s (LongBench) and 2400 s (MRCR).
+- **Answer budget.** A reasoning model spends a small budget inside its think block and returns empty content, scoring 0 by construction. LongBench uses 1024 tokens.
+- **Which channel is graded.** Models served with `--reasoning-format deepseek` put the answer in `reasoning_content` while `content` stays empty. Both benchmarks read either channel, and LongBench reports an `unparsed` count so a parse failure is never mistaken for a wrong answer.
 
-The lesson generalizes beyond this project: **a benchmark harness that reports a timeout or a zero is making a claim about itself as much as about the model.** Check the unparsed rate and the wall-clock distribution before believing either.
+Check the unparsed rate and the wall-clock distribution before reading either benchmark.
 
 ### CLIP score (prompt adherence)
 
-Cosine similarity between CLIP's embedding of the prompt and of the generated image (`openai/clip-vit-base-patch32`, reported as 100 x cosine). Reference-free, so it needs no ground-truth image — it measures whether the image matches what was asked for, not whether it is attractive.
+Cosine similarity between CLIP's embedding of the prompt and of the generated image (`openai/clip-vit-base-patch32`, reported as 100 × cosine). Reference-free: it measures whether the image matches the prompt, not whether it is attractive.
 
-**Score:** roughly 20-40 in practice; higher is better. Judge it per prompt rather than by the mean: across six prompts the three image models here land within 0.4 points of each other on average while differing by up to 10 points on individual prompts. It does detect a missing subject — SDXL-Turbo omitting the horse from "astronaut riding a horse" cost it 10 points against SD-Turbo. Results: [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).
-
-Earlier editions of this page listed CLIP score as "not run" on the grounds that the visual gap between the candidates was decisive without it. That turned out to be wrong in an interesting way: scored, the models are tied on adherence, and the assumed gap does not exist.
-
-## Superseded results
-
-Findings that were true at some point in this project and are not true now. They're recorded because each one is easy to rediscover from an old note or an upstream issue, and re-deriving them costs hours.
-
-- **Every old flash-attention measurement is void.** The "2.3× penalty", the counterbalanced A/B runs, and the claim that the effect reverses for state-space models were all taken while `FLASH_ATTN_EXT` was unsupported on Vulkan and attention was running on the **CPU**. With it on the GPU, flash attention is the faster option for generation.
-- **q8_0 was the problem quantization on this driver, and it is now root-caused.** Two failures that looked independent — the multi-column `mul_mat_vecq` path and a q8_0 KV cache under flash attention — are the same defect, and both paths now route q8_0 elsewhere. The general lesson: **a performance patch can convert a correct-but-slow path into a fast-and-wrong one**, and only a per-operation differential test catches it.
-- **`int dot: 0` and `warp size` in the capability banner don't tell you what a build is doing.** Both are printed from the driver's raw report, before the backend applies its own decisions. See [hardware.md](hardware.md#reading-the-capability-line).
-- **[llama.cpp#20104](https://github.com/ggml-org/llama.cpp/issues/20104)** (Intel-Mac AMD Vulkan gibberish) **does not reproduce** on a current checkout: the correctness battery passes, and GPU [perplexity](glossary.md#g-ppl) matches the CPU within 0.05%. The gibberish people hit on this hardware today is a [wrong device](README.md#ki-wrong-device) or the [subgroup misreport](README.md#ki-subgroup-size).
-- **Metal was measured, not assumed.** It's broken differently for LLMs (PCIe re-reads, about 0.8 tok/s) than for image generation (watchdog timeout, no output at all).
-- **The Intel GPU was evaluated once and permanently excluded.** It was slower than the CPU at every size tested, and numerically wrong under MoltenVK. The defensive fix on these branches exists to stop it being *silently* wrong, not to make it usable.
-- **Gemma-4-E4B no longer triggers device loss.** It once ran out of VRAM at `pp512` with flash attention off, and now completes in both configurations. The remaining reproducible trigger is hours of back-to-back GPU work with no gap; about 40 minutes of idle restored normal behaviour.
+**Score:** roughly 20–40 in practice, higher is better. Judge per prompt rather than by the mean — the three image models here sit within 0.4 points on average while differing by up to 10 points on individual prompts. It detects a missing subject: SDXL-Turbo omitting the horse from "astronaut riding a horse" costs it 10 points against SD-Turbo. Results: [stable-diffusion.cpp.md](stable-diffusion.cpp.md#image-quality).

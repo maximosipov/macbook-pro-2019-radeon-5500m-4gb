@@ -1,6 +1,6 @@
 # llama.cpp
 
-The reference LLM runtime, and the tool to measure on. Everything else here wraps this code.
+The reference LLM runtime, and the tool to measure on. ollama and LocalAI wrap this code.
 
 | | |
 |---|---|
@@ -16,7 +16,7 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 ## Overview
 
-llama.cpp is a toolbox rather than a single binary. What ships in `tools/`:
+A toolbox rather than a single binary. What ships in `tools/`:
 
 - **`llama-cli`** — one-shot or interactive generation, full control of sampling, and [GBNF](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md) grammar-constrained output.
 - **`llama-server`** — an [OpenAI-compatible](glossary.md#g-openai-api) HTTP server (`/v1/chat/completions`, `/completion`, `/embedding`, `/tokenize`) with a built-in web UI, parallel request slots, context shifting, speculative decoding, tool calling and multimodal support.
@@ -26,13 +26,13 @@ llama.cpp is a toolbox rather than a single binary. What ships in `tools/`:
 - **`llama-mtmd-cli`** — multimodal inference: an LLM plus an [`mmproj`](glossary.md#g-vlm) vision or audio encoder.
 - **Smaller tools** — `llama-tokenize`, `llama-gguf-split`, `llama-export-lora`, `llama-tts`, and `llama-rpc-server`.
 
-**Why it matters here:** ollama and LocalAI are both wrappers around this code, so measure here first. `llama-bench` is the only reliable way to compare models on this machine, and the features that make a 4 GB card work — [layer offload](glossary.md#g-ngl), [KV cache quantization](glossary.md#g-kv-quant) and [flash attention](glossary.md#g-flash-attn) — are all controlled by its flags.
+Measure here first: `llama-bench` is the only reliable way to compare models on this machine, and the flags that make a 4 GB card work — [layer offload](glossary.md#g-ngl), [KV cache quantization](glossary.md#g-kv-quant), [flash attention](glossary.md#g-flash-attn) — all live here.
 
 ## Changes on this branch
 
-The [same nine Vulkan changes as ggml](ggml.md#changes-on-this-branch) (llama.cpp vendors a synced copy of ggml), plus one commit adding diagnostic environment switches.
+The [same nine Vulkan changes as ggml](ggml.md#changes-on-this-branch), since llama.cpp vendors a synced copy, plus one commit adding diagnostic environment switches.
 
-**These SHAs matter.** The [ollama](ollama.md#build) and [LocalAI](localai.md#build) recipes cherry-pick exactly this list onto their own pinned llama.cpp commits, because neither can build from this branch's tip:
+The [ollama](ollama.md#build) and [LocalAI](localai.md#build) recipes cherry-pick exactly this list onto their own pinned commits, because neither can build from this branch tip:
 
 ```
 7847fca13  matmul subgroup correctness (RDNA1 and older Intel GPUs)
@@ -47,7 +47,7 @@ e629266a1  guard the broken q8_0 mul_mat_vecq path
 268aff1aa  keep q8_0 off the flash-attention MMQ path
 ```
 
-All ten apply cleanly to ollama's pinned `b10091` and to LocalAI's pinned `1cbfd1988`, verified while writing this guide.
+All ten apply cleanly to ollama's pinned `b10091` and LocalAI's pinned `1cbfd1988`.
 
 ## Build
 
@@ -84,7 +84,7 @@ cmake --build build --config Release -j"$(sysctl -n hw.ncpu)"
 
 ## Run
 
-Use `--flash-attn on` everywhere. It runs on the GPU on this branch, which reverses this project's earlier advice ([known issue](README.md#ki-flash-attention)). `-st` makes `llama-cli` answer once and exit; without it, newer builds open a chat UI.
+Use `--flash-attn on` everywhere: it runs on the GPU on this branch ([known issue](README.md#ki-flash-attention)). `-st` makes `llama-cli` answer once and exit; without it, current builds open a chat UI.
 
 ```bash
 # One-shot generation
@@ -110,15 +110,13 @@ Which model to load, and how much context each one can hold: [models.md](models.
 
 ## Verify
 
-Check the device banner in the startup log: `Vulkan0` must be the Radeon, with `warp size: 32` ([shared setup](README.md#shared-setup)).
-
-Confirm the model is really on the GPU. The load log should show the weights in a Vulkan buffer, and no CPU buffer for the offloaded layers:
+The startup banner must show `Vulkan0` as the Radeon with `warp size: 32` ([shared setup](README.md#shared-setup)). Confirm the weights are in a Vulkan buffer with no CPU buffer for offloaded layers:
 
 ```bash
 ./build/bin/llama-server -m model.gguf -ngl 99 -fa on --ctx-size 8192 2>&1 | grep -E "buffer size|KV"
 ```
 
-For an independent check, read VRAM use from IOKit while generating. A 4B Q4_K_M model resident on the Radeon shows about 3.4 GiB:
+Independently, read VRAM use from IOKit while generating — a 4B Q4_K_M model shows about 3.4 GiB:
 
 ```bash
 ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
@@ -140,9 +138,9 @@ ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
 ./build/bin/llama-server -m model.gguf -ngl 99 -fa on --ctx-size 40960 2>&1 | grep -E "KV|buffer size"
 ```
 
-Reproduced on a fresh build of the branch tip — Qwen3-4B-Instruct-2507 Q4_K_M, `-ngl 99 -fa 1 -r 3`, CPU unthrottled: **pp512 59.65 ± 0.51, tg128 40.44 ± 0.11**, against 59.4 and 40.8 when the fixes landed.
+Branch tip, Qwen3-4B-Instruct-2507 Q4_K_M, `-ngl 99 -fa 1 -r 3`, CPU unthrottled: **pp512 59.65 ± 0.51, tg128 40.44 ± 0.11**.
 
-**Read [benchmarking.md](benchmarking.md) before trusting any number these commands print.** The same binary, model and flags produced 10.5, 24.9 and 33.9 tok/s across three sessions.
+Read [benchmarking.md](benchmarking.md) before trusting any number these commands print: the same binary, model and flags produced 10.5, 24.9 and 33.9 tok/s across three sessions.
 
 ### KV cache precision
 
@@ -154,25 +152,23 @@ Measured on Qwen3.5-4B. This is the setting that decides your [context length](g
 | q8_0 | 17.0 KiB | ~82K | Yes on this branch; wrong on builds without the [q8_0 flash-attention guard](README.md#ki-q8-0) |
 | q4_0 | 9.0 KiB | **128K** | Yes |
 
-A quantized KV cache requires flash attention. Now that flash attention runs on the GPU, it costs about **4%**: `-ctk q4_0 -ctv q4_0` measures 36.7 tg128 against 38.1 for f16. Prefer q4_0.
+A quantized KV cache requires flash attention and costs about 4%: `-ctk q4_0 -ctv q4_0` measures 36.7 tg128 against 38.1 for f16. Prefer q4_0.
 
 ### Flash attention
 
-`-fa on` is a clear win for generation, and at long context a *loss* for prefill: pp8192 measures 24.3 with a q4_0 KV cache, against 31.5 with f16 and flash attention off. So the rule isn't a blanket setting: **turn it on for generation-heavy work, and whenever you need a quantized KV cache**, which it is a prerequisite for.
+`-fa on` wins for generation and loses for long-context prefill: pp8192 measures 24.3 with a q4_0 cache against 31.5 with f16 and flash attention off. Turn it on for generation-heavy work and wherever a quantized KV cache is needed.
 
 Per-model speed, VRAM and context ceilings are in [models.md](models.md).
 
 ## Troubleshooting
 
-**Output is gibberish.** Check the device banner: if `warp size` reads 64, upgrade MoltenVK ([known issue](README.md#ki-subgroup-size)). If the model is a hybrid (Mamba-2, Gated DeltaNet), check that you're on this branch rather than upstream. Then run [`test-backend-ops`](ggml.md#run).
+**Output is gibberish.** If `warp size` reads 64, upgrade MoltenVK ([known issue](README.md#ki-subgroup-size)). For hybrid models (Mamba-2, Gated DeltaNet), confirm you are on this branch. Then run [`test-backend-ops`](ggml.md#run).
 
-**Generation is far slower than the numbers here.** Check that Metal wasn't compiled in (`otool -L build/bin/llama-cli | grep -i metal` should print nothing), that `-ngl 99` was accepted, and that no CPU buffer appears in the load log.
+**Generation is far slower than expected.** Check Metal was not compiled in (`otool -L build/bin/llama-cli | grep -i metal` prints nothing), that `-ngl 99` was accepted, and that no CPU buffer appears in the load log.
 
-**`vk::DeviceLostError` part-way through a run.** Unrecoverable in-process; the runtime must be restarted. On this card it follows hours of continuous GPU work. Leave gaps between jobs and supervise long-running servers.
+**`vk::DeviceLostError` part-way through a run.** Unrecoverable in-process; restart the runtime. It follows hours of continuous GPU work, and a benchmark warm-up pass can trigger it on Qwen3.5-4B.
 
-**A benchmark warm-up pass triggers a device loss.** Adding one did exactly that for Qwen3.5-4B. A more representative number also means a less likely finish.
-
-**Watch for orphaned benchmark processes.** One outlived a `pkill` of its parent script and held the machine at `CPU_Speed_Limit=36` while the next run sat waiting for a machine that something else was busy heating.
+**Orphaned benchmark processes.** One can survive a `pkill` of its parent script and hold the machine at `CPU_Speed_Limit=36` while the next run waits to cool.
 
 ## Reference
 
@@ -186,7 +182,7 @@ Key flags on this hardware:
 | `--ctx-size N` | Context window. Size it from [models.md](models.md). |
 | `-st`, `--temp 0` | Single-turn output, deterministic sampling |
 
-Diagnostic environment switches added by this branch (all opt-in, used to isolate the fixes):
+Diagnostic environment switches added by this branch, all opt-in:
 
 | Variable | Effect |
 |---|---|
