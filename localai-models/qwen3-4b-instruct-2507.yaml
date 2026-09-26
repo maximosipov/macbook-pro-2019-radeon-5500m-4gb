@@ -5,20 +5,22 @@
 # binding constraint rather than the weights. A q4_0 cache is what makes an
 # agent-sized window fit at all (~10K at f16 against ~35K at q4_0).
 #
-# Fit: 2.82 GB weights + ~648 MB KV at 16K/q4_0, against 4278 MB usable.
-# Served warm it measured 27.1 / 27.9 / 28.4 tok/s, the tightest numbers taken
-# on this machine.
+# Fit: 2.82 GB of weights against 4278 MB usable leaves the least room for a
+# cache of any model here, which is why 24K is the ceiling while lighter models
+# reach 64K-128K. Served warm it measured 27.1 / 27.9 / 28.4 tok/s.
 
 name: qwen3-4b-instruct-2507
 backend: llama-cpp
-description: Qwen3 4B Instruct 2507 (dense GQA, 16K context, q4_0 KV). Best tool calling, heaviest KV cache.
+description: Qwen3 4B Instruct 2507 (dense GQA, 24K context, q4_0 KV). Best tool calling, heaviest KV cache.
 
 parameters:
   model: Qwen3-4B-Instruct-2507-Q4_K_M.gguf
 
-# 16384 is comfortably above the ~11,132 tokens an agent's opening request
-# needs. Raising this much further will spill the KV cache to host RAM.
-context_size: 16384
+# Measured ceiling. 24576 runs at full speed (37.9 t/s against a 37.2 t/s
+# baseline at 4K); 32768 spills the KV cache to host RAM and collapses to
+# 0.9 t/s. The cliff is sharp, so there is no headroom above this — if you
+# raise n_batch, drop the context.
+context_size: 24576
 
 gpu_layers: 99
 f16: true

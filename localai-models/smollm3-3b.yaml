@@ -1,0 +1,30 @@
+# SmolLM3-3B — do NOT use this for agent loops.
+#
+# Like Phi-4-mini, it emits no parseable `tool_calls` on this stack. It also has
+# the weakest instruction-following scores in the set (IFBench strict 0.08), so
+# prompts that demand an exact output format are unreliable.
+#
+# What it is good at: MATH-500 0.74, third best here, at 51.2 tok/s. Hugging
+# Face publishes the weights, the data recipe and the training details, which
+# makes it the most reproducible model in the set.
+#
+# Fit: 2.28 GB weights against 4278 MB usable.
+
+name: smollm3-3b
+backend: llama-cpp
+description: SmolLM3 3B (dense, 64K context, q4_0 KV). Fully open training recipe; strong maths, no tool calls.
+
+parameters:
+  model: SmolLM3-Q4_K_M.gguf
+
+# Its entire trained window. 65536 runs at 46.4 t/s against a 46.3 t/s baseline
+# at 4K, so the model runs out of context before the card runs out of VRAM —
+# the only model here in that position. 128K is reachable only with YaRN
+# scaling, which is not configured here.
+context_size: 65536
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

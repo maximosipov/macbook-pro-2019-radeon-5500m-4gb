@@ -1,6 +1,6 @@
 # LocalAI
 
-One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. No source changes, but the Vulkan build must be composed by hand.
+One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. One patch, but most of the work is composing the Vulkan build by hand.
 
 | | |
 |---|---|
@@ -8,7 +8,7 @@ One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. 
 | **Use it for** | Pointing a coding agent or any OpenAI SDK at this machine |
 | **Fork and branch** | [`maximosipov/LocalAI`, `macbook-pro-2019-radeon-5500m-4gb`](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb) |
 | **Upstream** | [mudler/LocalAI](https://github.com/mudler/LocalAI) |
-| **Source changes** | None. Build composition, wrapper scripts and an app bundle. |
+| **Source changes** | 1 commit (VRAM detection). Plus build composition, wrapper scripts and an app bundle. |
 | **Pinned llama.cpp** | `1cbfd1988` (see `backend/cpp/llama-cpp/Makefile`) |
 | **Verified with** | LocalAI `ecdb321`, gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24, CMake 3.27.0, MoltenVK 1.4.2, macOS 14.8.2 |
 | **Runbook on the branch** | [RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md](https://github.com/maximosipov/LocalAI/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md) |
@@ -28,7 +28,9 @@ Only the llama.cpp and stable-diffusion backends are worth building here; the re
 
 ## Changes on this branch
 
-**No source changes.** LocalAI's macOS build targets Apple Silicon and Metal, so a Vulkan build is composed from two pieces:
+**One patch: VRAM detection.** `GetGPUMemoryUsage` tries `nvidia-smi`, `rocm-smi`, `clinfo` and an Apple probe that filters on a vendor string containing `apple`. On an Intel Mac with a discrete AMD card every path misses, so LocalAI logs `GPU vendor=""` and `Total available VRAM 0` and sizes its defaults as if the machine had no GPU. The patch adds a `system_profiler` fallback that reads `spdisplays_vram`, so the Radeon reports its 4 GB. Proposed upstream; see [Upstream submissions](#upstream-submissions).
+
+The rest is not source but composition. LocalAI's macOS build targets Apple Silicon and Metal, so a Vulkan build is assembled from two pieces:
 
 1. The llama backend is a separate gRPC server process built from a pinned llama.cpp; substitute one built from that pin with the [ten Vulkan fix commits](llama.cpp.md#changes-on-this-branch) cherry-picked on.
 2. The backend is a child process, so a wrapper script must carry the MoltenVK environment into it.
@@ -296,7 +298,16 @@ $ ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"inUseVidMemoryBytes"=[0-9]*'
 3467935744   # Granite and Qwen both resident
 ```
 
-The hardware limit is real. The software defect is that nothing says so: the shortfall surfaces as an empty completion instead of an out-of-memory error. `--max-active-backends=1` is not a fix — it evicts the previous model, but the eviction then races with the three requests OpenCode opens a session with, and you get `connection refused` instead. **Point your client at one model and leave it there. To change models, quit and relaunch first.**
+The hardware limit is real. The software defect is that nothing says so: the shortfall surfaces as an empty completion instead of an out-of-memory error.
+
+`--max-active-backends=1` (this machine's `runtime_settings.json` already sets it) prevents two models being resident at once, so it does rule out the empty-completion path above. What it does not do is make switching safe under load. Measured over the OpenAI API:
+
+| Request pattern spanning a model switch | Result |
+|---|---|
+| Sequential — one request at a time | Reliable. Three models in one session, every answer correct. |
+| Concurrent — three requests at once | **Exactly one of the three fails** with `rpc error: code = Unavailable`, reproduced in 3 of 3 trials, both switch directions. |
+
+The eviction window is the whole story: the first request tears down one backend and starts another, and anything arriving during that gap hits a dead socket. So a **single-threaded** client can route across models freely, while a client that opens parallel requests — OpenCode starts a session with three — will lose one per switch. **Point a parallel client at one model and leave it there; to change models, quit and relaunch first.** A serialised caller can switch at will.
 
 **`content` is empty and `reasoning` is full.** That's a [thinking model](glossary.md#g-thinking) behaving normally over an OpenAI-compatible API. `content` only fills once the model closes its think block, so an empty `content` with `finish_reason: "length"` is a token-budget problem, not the MoltenVK corruption it resembles.
 
@@ -305,6 +316,16 @@ The hardware limit is real. The software defect is that nothing says so: the sho
 **The server exits at startup with `read-only file system`.** Storage paths were resolved relative to a working directory of `/`. Pass them explicitly, as the app bundle does.
 
 **Images come back as noise.** `diffusion_conv_direct:true` didn't reach the backend. Check the model YAML's `options` list.
+
+## Upstream submissions
+
+Three changes are prepared for [mudler/LocalAI](https://github.com/mudler/LocalAI). Only the first is part of the build described above; the other two sit on their own branches off `upstream/master` and are not compiled into the binary this guide produces.
+
+| Change | Branch | In this build |
+|---|---|---|
+| Detect non-Apple GPUs on macOS via `system_profiler`, so a discrete AMD card reports its VRAM instead of 0 | `macbook-pro-2019-radeon-5500m-4gb` | Yes |
+| Make img2img `strength` configurable on the stable-diffusion backend, instead of hardcoding 0.75 | `feat/sd-img2img-strength` | No |
+| Honour cloud-proxy passthrough on `/v1/images/generations`, which already works for chat | `feat/images-cloud-proxy` | No |
 
 ## Reference
 

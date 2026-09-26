@@ -5,17 +5,21 @@
 # its Gated DeltaNet prefill is a sequential scan, which is expensive through
 # MoltenVK — so long prompts cost more than the generation rate suggests.
 #
-# Fit: 3.05 GB weights + ~288 MB KV at 32K/q4_0, against 4278 MB usable.
-# This is the largest of the four: leave it alone in the session.
+# Fit: 3.05 GB of weights against 4278 MB usable. Heavy on weights but light on
+# cache, so it still reaches 96K. Leave it alone in the session.
 
 name: qwen3.5-4b
 backend: llama-cpp
-description: Qwen3.5 4B (Gated DeltaNet hybrid, 32K context, q4_0 KV). Best maths and reasoning on this machine.
+description: Qwen3.5 4B (Gated DeltaNet hybrid, 96K context, q4_0 KV). Best maths and reasoning on this machine.
 
 parameters:
   model: Qwen3.5-4B-Q4_K_M.gguf
 
-context_size: 32768
+# Measured ceiling. The Gated DeltaNet hybrid keeps only ~8 of 32 layers as
+# attention, so 98304 holds at full speed (31.0 t/s against 31.1 at 4K).
+# 131072 spills and collapses to 1.2 t/s, well short of the 256K it was
+# trained for.
+context_size: 98304
 
 gpu_layers: 99
 f16: true

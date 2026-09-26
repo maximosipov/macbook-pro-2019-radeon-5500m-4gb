@@ -1,0 +1,29 @@
+# Phi-4-mini — do NOT use this for agent loops.
+#
+# On this stack it answers tool prompts in prose instead of emitting
+# `tool_calls`, so a loop waiting for a function call will silently never get
+# one. That is the single most important thing to know about this config.
+#
+# What it is good at: MMLU-Pro 0.39 and MATH-500 0.67, and it is the only model
+# here to score above zero on LongBench-v2 (0.333). MIT licence, and the oldest
+# model in the set (February 2025).
+#
+# Fit: 3.04 GB weights against 4278 MB usable — the tightest fit here, which is
+# why a 128K-trained model stops at 56K. 42.0 tok/s.
+
+name: phi-4-mini
+backend: llama-cpp
+description: Phi-4-mini instruct (dense GQA, 56K context, q4_0 KV). Strong on knowledge and long documents; emits no tool calls.
+
+parameters:
+  model: Phi-4-mini-instruct-Q4_K_M.gguf
+
+# Measured ceiling. 57344 runs at full speed; 65536 spills. Trained for 128K,
+# but the weights leave too little room for that much cache.
+context_size: 57344
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

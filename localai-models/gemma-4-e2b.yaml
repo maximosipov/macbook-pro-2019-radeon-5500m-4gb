@@ -1,0 +1,34 @@
+# Gemma-4-E2B — the best capability per gigabyte, and the fastest prefill.
+#
+# 148.8 tok/s prefill, well clear of anything else here, and 53.1 tok/s
+# generation, in 1.65 GB resident. It calls tools properly (0.84 BFCL AST,
+# 23/24 on the custom set) and is second on both instruction-following and
+# GPQA-Diamond. The best default when VRAM is the binding constraint.
+#
+# Fit: 1.45 GB of weights, 1.65 GB resident at 4K. "E" is *effective*
+# parameters — 5.1B are stored but the per-layer embedding table (1756 MiB)
+# stays in host RAM by design, so it occupies less VRAM than models with half
+# its parameter count. That host-RAM buffer is not a spill.
+#
+# MATH-500 reads 0.29, a formatting artifact rather than a maths result: the
+# model rarely emits a parseable \boxed{}. Google's QAT q4_0 build was measured
+# against this one and is not worth it — 8% slower prefill for no quality gain.
+
+name: gemma-4-e2b
+backend: llama-cpp
+description: Gemma 4 E2B (gemma4 iSWA/PLE, 128K context, q4_0 KV). Fastest prefill and the most capability per gigabyte.
+
+parameters:
+  model: gemma-4-E2B-it-Q4_K_M.gguf
+
+# Its whole trained window, measured. Interleaved sliding-window attention
+# (n_swa = 512) plus several layers holding no KV cache at all make the cache
+# tiny: 128K fits even at f16, so quantizing it is optional here rather than
+# required.
+context_size: 131072
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

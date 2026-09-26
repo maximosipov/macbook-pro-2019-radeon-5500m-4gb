@@ -1,0 +1,39 @@
+# Gemma-4-E4B — the quality pick, and the only model that holds 128K.
+#
+# Best MMLU-Pro measured here (0.54), second on GPQA-Diamond (0.49), and a
+# perfect 1.000 on MRCR long-context retrieval. The trade is speed: 32.3 tok/s
+# generation, the slowest in the set.
+#
+# Fit: 3.21 GB resident at 4K context. "E" is *effective* parameters — 8.0B are
+# stored but the per-layer embedding table (2208 MiB) stays in host RAM by
+# design, so only the compute core occupies VRAM. That constant host-RAM buffer
+# is normal for this architecture and is not a spill.
+#
+# MATH-500 reads 0.15, which is a formatting artifact rather than a maths
+# result: the model rarely emits a parseable \boxed{}. Check the exact output
+# shape your client parses before relying on it.
+
+name: gemma-4-e4b
+backend: llama-cpp
+description: Gemma 4 E4B (gemma4 iSWA/PLE, 64K context, q4_0 KV). Best broad knowledge and long-context recall here.
+
+parameters:
+  model: gemma-4-E4B-it-Q4_K_M.gguf
+
+# 64K, verified under a real prompt load rather than an empty one. The KV cache
+# for the full 131072 does allocate, but the window is not usable: with a
+# ~10K-token prompt, generation collapses from 22.1 t/s at 65536 to 4.5 t/s at
+# 131072, and a ~43K-token prompt crashed the backend outright after 105
+# minutes. Measured at 65536 over llama-server: 46.1 t/s prefill, 22.1 t/s
+# generation, and correct needle retrieval from a 10K-token haystack.
+#
+# Do not raise this without re-testing with a full prompt; loading the model at
+# a larger context and generating a few tokens proves only that the cache
+# allocated, not that the context works.
+context_size: 65536
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

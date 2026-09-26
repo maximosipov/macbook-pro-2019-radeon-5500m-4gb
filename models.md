@@ -24,7 +24,7 @@ Four measurements per model:
 | **Horizontal** | Knowledge and reasoning — mean of GPQA-Diamond and MMLU-Pro, 0.10 to 0.60 |
 | **Vertical** | Long-context retrieval — MRCR at ~19K tokens, 0.00 to 1.00 |
 | **Dot size** | Generation speed — smallest dot 32 tok/s, largest 58 |
-| **Dot colour** | Largest context that fits on this card — pale blue 35K through deep navy 128K |
+| **Dot colour** | Largest context that fits on this card — pale blue 24K through deep navy 128K |
 
 Labels repeat both as `(context, speed)`. Context maxima are the q4_0 figures from the [ceilings table](#context-ceilings); several are the model's trained limit rather than the card's.
 
@@ -57,22 +57,22 @@ quadrantChart
     quadrant-2 Retrieves, reasons less
     quadrant-3 Weak at both
     quadrant-4 Reasons, cannot retrieve
-    "Gemma-4-E4B (128K, 32 tok/s)": [0.83, 0.94] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    "Qwen3-4B-2507 (35K, 41 tok/s)": [0.60, 0.68] radius: 4, color: #9ecae1, stroke-color: #9ecae1, stroke-width: 1px
+    "Gemma-4-E4B (64K usable, 32 tok/s)": [0.83, 0.94] radius: 3, color: #4292c6, stroke-color: #4292c6, stroke-width: 1px
+    "Qwen3-4B-2507 (24K, 41 tok/s)": [0.60, 0.68] radius: 4, color: #c6dbef, stroke-color: #c6dbef, stroke-width: 1px
     "Gemma-4-E2B (128K, 53 tok/s)": [0.67, 0.34] radius: 6, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    "Phi-4-mini (49K, 42 tok/s)": [0.49, 0.30] radius: 4, color: #6baed6, stroke-color: #6baed6, stroke-width: 1px
+    "Phi-4-mini (56K, 42 tok/s)": [0.49, 0.30] radius: 4, color: #6baed6, stroke-color: #6baed6, stroke-width: 1px
     "SmolLM3-3B (64K, 51 tok/s)": [0.38, 0.18] radius: 6, color: #4292c6, stroke-color: #4292c6, stroke-width: 1px
     "Granite-4.0-H (128K, 35 tok/s)": [0.45, 0.11] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    "Granite-4.2 (95K, 40 tok/s)": [0.31, 0.06] radius: 4, color: #2171b5, stroke-color: #2171b5, stroke-width: 1px
+    "Granite-4.2 (64K, 40 tok/s)": [0.31, 0.06] radius: 4, color: #4292c6, stroke-color: #4292c6, stroke-width: 1px
     "LFM2.5 (128K, 58 tok/s)": [0.14, 0.06] radius: 7, color: #08306b, stroke-color: #08306b, stroke-width: 1px
-    "Qwen3.5-4B (128K, 34 tok/s)": [0.82, 0.06] radius: 3, color: #08306b, stroke-color: #08306b, stroke-width: 1px
+    "Qwen3.5-4B (96K, 34 tok/s)": [0.82, 0.06] radius: 3, color: #2171b5, stroke-color: #2171b5, stroke-width: 1px
 ```
 
 Gemma-4-E4B and Qwen3.5-4B differ by 0.005 on reasoning and 2 tok/s, and by the full height of the chart on retrieval. Short-prompt capability does not predict long-context behaviour.
 
 Gemma-4-E4B is alone in the top right and is the slowest decoder in the set. Gemma-4-E2B trades some retrieval for 53 tok/s and the smallest footprint (1.65 GB). LFM2.5 is the fastest model and the weakest on both other axes.
 
-Context capacity cuts across both axes: five models hold their full 128K window, spread across all four quadrants, because the ceiling follows [KV geometry](#context-ceilings) rather than model quality. Only Qwen3-4B-2507 (35K) and Phi-4-mini (49K) are constrained, and both need a q4_0 cache for even that — at f16 they reach about 10K and 14K.
+Context capacity cuts across both axes: three models pass the sweep at the full 128K window, spread across three quadrants, because the ceiling follows [KV geometry](#context-ceilings) rather than model quality — though only Gemma-4-E4B has been tested under a real prompt load, and it holds 64K rather than the 128K it allocates. Qwen3-4B-2507 is the most constrained at 24K despite leading on tool calling, then Phi-4-mini at 56K — both need a q4_0 cache for even that, reaching about 10K and 14K at f16. SmolLM3-3B's 64K is its trained limit rather than the card's.
 
 *The quadrant boundaries fall at reasoning 0.35 and MRCR 0.25. The retrieval axis is square-root scaled, because five of the nine models score within 0.04 of zero and would otherwise be one unreadable blob.*
 
@@ -274,23 +274,25 @@ Read these as a floor: the GPU idles at 10 MHz, so a cold `tg128` partly measure
 
 ## Context ceilings
 
-Architecture, not parameter count, decides how much context fits. The maximum is the largest window that fits before [spilling to the CPU](glossary.md#g-spill), computed from each model's [KV cache](glossary.md#g-kv) geometry against the 4278 MB usable.
+Architecture, not parameter count, decides how much context fits. The maximum is the largest window that fits before [spilling to the CPU](glossary.md#g-spill). The f16 column is computed from each model's [KV cache](glossary.md#g-kv) geometry against the 4278 MB usable; the q4_0 column is **measured**, by loading each model at descending context sizes and watching for the throughput collapse that marks a spill. Ready-to-use configs at these sizes are in [localai-models](localai-models/README.md#maximum-context-measured).
 
 | Model | Maker | [Architecture](glossary.md#g-arch) (attention layers) | KV f16 per token | Max context, f16 KV | Max context, q4_0 KV | Trained for |
 |---|---|---|---|---|---|---|
-| Qwen3-4B-2507 | Alibaba | dense GQA (36/36) | 144 KiB | ~10K | ~35K | 256K |
-| Qwen3.5-4B | Alibaba | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | ~128K | 256K |
+| Qwen3-4B-2507 | Alibaba | dense GQA (36/36) | 144 KiB | ~10K | **24K (measured)** | 256K |
+| Qwen3.5-4B | Alibaba | [Gated DeltaNet](glossary.md#g-gdn) hybrid (~8/32) | 32 KiB | ~37K | **96K (measured)** | 256K |
 | Gemma-4-E2B | Google | gemma4 [iSWA](glossary.md#g-arch) (35 layers, 512-token window on most) | 6 KiB | **128K (capped, measured)** | 128K (capped, measured) | 128K |
-| Gemma-4-E4B | Google | gemma4 iSWA (42 layers) | 16 KiB | **64K (measured)** † | 128K (capped, measured) | 128K |
-| Granite-4.0-H-Micro | IBM | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~128K (capped)** | ~128K (capped) | 128K |
-| Granite-4.2-3B | IBM | dense GQA (40/40) | 80 KiB | ~27K | ~95K | 128K |
-| LFM2.5-2.6B | Liquid AI | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~128K (capped)** | ~128K (capped) | 128K |
-| Phi-4-mini | Microsoft | dense GQA (32/32) | 128 KiB | ~14K | ~49K | 128K |
-| SmolLM3-3B | Hugging Face | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | ~64K (capped) | 64K |
+| Gemma-4-E4B | Google | gemma4 iSWA (42 layers) | 16 KiB | **64K (measured)** † | 128K allocates, **64K usable** ‡ | 128K |
+| Granite-4.0-H-Micro | IBM | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~128K (capped)** | 128K (capped, measured) | 128K |
+| Granite-4.2-3B | IBM | dense GQA (40/40) | 80 KiB | ~27K | **64K (measured)** | 128K |
+| LFM2.5-2.6B | Liquid AI | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~128K (capped)** | 128K (capped, measured) | 128K |
+| Phi-4-mini | Microsoft | dense GQA (32/32) | 128 KiB | ~14K | **56K (measured)** | 128K |
+| SmolLM3-3B | Hugging Face | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | 64K (capped, measured) | 64K |
 
 "Capped" means the model's *trained* context runs out before the VRAM does. Context windows follow each vendor's wording, which is binary: 128K is 131,072 tokens, 256K is 262,144, 64K is 65,536. The computed maxima in the other columns are decimal approximations, so a row can read "~128K (capped)" against a 128K trained window.
 
-The hybrids hold their whole trained window: Granite-4.0-H-Micro's cache grows at 8 KiB/token and LFM2.5's at 16 KiB, so VRAM is never the limit. The dense models are VRAM-bound — Qwen3-4B-2507 reaches about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) lifts it to 35K.
+The hybrids hold their whole trained window: Granite-4.0-H-Micro's cache grows at 8 KiB/token and LFM2.5's at 16 KiB, so VRAM is never the limit. The dense models are VRAM-bound — Qwen3-4B-2507 reaches about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) lifts it to 24K.
+
+Measurement matters here because the geometry alone misleads in both directions. Arithmetic over the cache puts Qwen3.5-4B at ~128K and Granite-4.2-3B at ~95K, but both spill well below that once the compute buffer is accounted for; Phi-4-mini goes the other way, holding 56K against a computed ~49K. The spill is sharp rather than gradual — one step past the ceiling, generation drops from roughly 40 tok/s to under 1.5 — so the boundary is unambiguous, and there is no useful headroom just above it.
 
 The two Gemma rows are **measured**, not computed: Gemma-4 uses interleaved sliding-window attention (`n_swa = 512`) and several layers hold no KV cache at all, so the per-layer arithmetic behind the other rows does not describe it. The figures come from llama.cpp's own loader accounting (`-v`), at ctx 32K and 128K:
 
@@ -300,6 +302,8 @@ The two Gemma rows are **measured**, not computed: Gemma-4 uses interleaved slid
 | Gemma-4-E4B | 2884 MiB | 552 MiB | 2088 MiB | 4972 MiB — over budget | 2208 MiB |
 
 E2B holds its entire trained window at f16, so quantizing its cache is optional. E4B fits 64K at f16 (2884 + 1064 = 3948 MiB) but not 128K; at q4_0 its whole window fits in about 3572 MiB.
+
+**‡** The 128K figure is an *allocation* ceiling, found by generating from a one-token prompt. Under a real load it does not hold: with a 9,650-token prompt, generation runs at 22.1 tok/s at 64K but 4.5 tok/s at 128K, and a 43K-token prompt crashed the backend. Treat every wide figure in this column as provisional until tested with a full prompt; only Gemma-4-E4B has had that second test.
 
 **†** Two measurement traps: a large CPU weight buffer is normal for these models rather than a spill — both keep a [per-layer embedding table](glossary.md#g-arch) in host RAM by design (1756 MiB for E2B, 2208 MiB for E4B), constant as context grows, so the VRAM column understates their total footprint; and [`ioreg`](glossary.md#g-ioreg) undercounts reserved cache, reporting less in use at 128K than at 32K because a one-token warm-up never touches most of the allocation. Use residency to confirm a model is on the GPU, and the loader log to confirm a context fits.
 

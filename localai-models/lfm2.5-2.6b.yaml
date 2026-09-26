@@ -5,19 +5,24 @@
 # keeps state small, and its SSM_CONV path is correct on this MoltenVK stack.
 # It emits proper tool_calls (0.69 BFCL AST), a tier below Granite.
 #
-# Fit: 1.84 GB weights + ~147 MB KV at 32K/q4_0, against 4278 MB usable.
-# Weights: LiquidAI/LFM2.5-2.6B-GGUF on Hugging Face.
+# Fit: 1.84 GB weights against 4278 MB usable — the most headroom of any model
+# here. Weights: LiquidAI/LFM2.5-2.6B-GGUF on Hugging Face.
 
 name: lfm2.5-2.6b
 backend: llama-cpp
-description: LFM2.5 2.6B (short-conv hybrid, 32K context, q4_0 KV). Fastest and smallest model on this machine.
+description: LFM2.5 2.6B (short-conv hybrid, 128K context, q4_0 KV). Fastest and smallest model on this machine.
 
 parameters:
   model: LFM2.5-2.6B-Q4_K_M.gguf
 
-# It was trained for 131K and fits its whole window on this card even at f16 KV.
-# 32K is a practical default; raise it if you need the range.
-context_size: 32768
+# Its whole trained window, measured: 131072 runs at 56.4 t/s, above its own 4K
+# baseline and the fastest figure taken on this machine at any context. Most
+# layers are gated short convolutions rather than attention, so the cache stays
+# small. It fits 128K even at f16 KV.
+#
+# Caveat: it scores 0.000 on MRCR, so a wide window does not mean it can recall
+# across one. Do not pick this model for long-history work.
+context_size: 131072
 
 gpu_layers: 99
 f16: true

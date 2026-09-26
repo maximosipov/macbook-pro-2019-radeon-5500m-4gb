@@ -21,10 +21,10 @@ Running local LLMs and image generation on a 2019 Intel MacBook Pro, with the mo
 
 Out of the box this GPU is unusable for AI work:
 
-- **Metal is the wrong backend.** It assumes Apple Silicon's unified memory; on a discrete GPU it copies weights across PCIe every token — about 0.8 tok/s for a 4B LLM. Image generation never finishes, because the macOS GPU watchdog kills the command buffer.
+- **ggml's Metal backend is the wrong one for this card.** [Metal](glossary.md#g-metal) is Apple's GPU API, and every path on this machine ends there — the only question is which ggml backend gets you to it. The direct one, `ggml-metal`, gates its fast kernels on an Apple Silicon GPU family, so on this Radeon they are all switched off: a 4B model generates at 1.86 tok/s against 39 on the Vulkan path, a 512-token prompt fails to decode at all, and image generation trips the [GPU watchdog](glossary.md#g-watchdog). See [known issues](#ki-metal).
 - **Official builds ship no alternative.** Upstream ollama for macOS has no Vulkan runner, so the Radeon is ignored ([ollama#13127](https://github.com/ollama/ollama/issues/13127)); LocalAI's macOS build targets Apple Silicon.
 
-What works is ggml's **[Vulkan](glossary.md#g-vulkan)** backend on **[MoltenVK](glossary.md#g-moltenvk)**, which implements Vulkan over Metal. Weights stay in the card's 4 GB of VRAM and a 3–4B model generates at 30–58 tok/s.
+What works is ggml's **[Vulkan](glossary.md#g-vulkan)** backend on **[MoltenVK](glossary.md#g-moltenvk)**, which implements Vulkan over Metal. The extra translation layer sounds like it should cost something, and it wins anyway: ggml's Vulkan kernels ask what the device can do rather than whether it is an Apple GPU, so this card gets the fast paths. A 3–4B model generates at 30–58 tok/s.
 
 MoltenVK is not a complete Vulkan driver. Several gaps make GPU kernels return wrong results without raising an error — fluent gibberish, [NaN](glossary.md#g-nan), or images of pure noise — so the guides show how to verify a build is correct, not merely running.
 
@@ -58,7 +58,7 @@ flowchart TD
 | **llama.cpp** | LLM runtime | `llama-cli`, the OpenAI-compatible `llama-server`, and `llama-bench` | The ggml fixes plus diagnostic switches (10 commits) | [llama.cpp.md](llama.cpp.md) |
 | **stable-diffusion.cpp** | Image runtime | Text-to-image CLI and server | None; build and run flags only | [stable-diffusion.cpp.md](stable-diffusion.cpp.md) |
 | **ollama** | Model server | `ollama pull` / `run`, the model library, a desktop app | 5 patches, plus the llama.cpp fixes | [ollama.md](ollama.md) |
-| **LocalAI** | Model server | One OpenAI-compatible API for text and images, a menu-bar app | None; build steps, wrapper scripts and an app bundle | [localai.md](localai.md) |
+| **LocalAI** | Model server | One OpenAI-compatible API for text and images, a menu-bar app | 1 VRAM-detection patch, plus build steps, wrapper scripts and an app bundle | [localai.md](localai.md) |
 
 ### How the forks relate
 
@@ -97,15 +97,17 @@ The app runs in the menu bar with no Dock icon and starts the server with the Mo
 
 **2. Add a model.** Weights are not bundled. Symlink a GGUF into the models folder and add a profile; OpenCode's opening prompt alone is about 11,000 tokens, so the window must be sized for it.
 
+Gemma-4-E4B is the best all-round pick here: top MMLU-Pro (0.54), near-top tool calling (BFCL 0.85), and the only model in the set that can actually retrieve across a long window (MRCR 1.000 against 0.014 for the next-widest model). 64K is the largest context measured *under a real prompt load* — see [context ceilings](models.md#context-ceilings) before raising it.
+
 ```bash
 M=~/Library/Application\ Support/LocalAI/models
-ln -s /path/to/granite-4.0-h-micro-Q4_K_M.gguf "$M/"
-cat > "$M/granite-coder.yaml" <<'EOF'
-name: granite-coder
+ln -s /path/to/gemma-4-E4B-it-Q4_K_M.gguf "$M/"
+cat > "$M/gemma-coder.yaml" <<'EOF'
+name: gemma-coder
 backend: llama-cpp
 parameters:
-  model: granite-4.0-h-micro-Q4_K_M.gguf
-context_size: 16384
+  model: gemma-4-E4B-it-Q4_K_M.gguf
+context_size: 65536
 f16: true
 gpu_layers: 99
 flash_attention: "true"
@@ -127,9 +129,9 @@ Restart the server from the menu-bar icon.
       "name": "LocalAI (Radeon 5500M)",
       "options": { "baseURL": "http://127.0.0.1:8085/v1" },
       "models": {
-        "granite-coder": {
-          "name": "Granite-4.0-H-Micro (16K, q4_0 KV)",
-          "limit": { "context": 16384, "output": 4096 }
+        "gemma-coder": {
+          "name": "Gemma-4-E4B (64K, q4_0 KV)",
+          "limit": { "context": 65536, "output": 4096 }
         }
       }
     }
@@ -138,10 +140,12 @@ Restart the server from the menu-bar icon.
 ```
 
 ```bash
-opencode run -m localai/granite-coder "Reply with exactly the word: ready"
+opencode run -m localai/gemma-coder "Reply with exactly the word: ready"
 ```
 
-Expect a first turn of about 3 minutes, while the GPU prefills OpenCode's system prompt, then 10–25 seconds per turn. Keep the server resident. Load one model per server session: on a 4 GB card a second model makes large prompts return empty completions with no error.
+Expect a first turn of about 3.5 minutes, while the GPU prefills OpenCode's system prompt at roughly 46 tok/s, then generation at about 22 tok/s. Both figures are measured with a loaded context and are slower than the headline numbers in [models.md](models.md#speed-and-fit), which are taken at a near-empty one.
+
+Two things to keep in mind. Gemma-4-E4B emits a reasoning preamble, so a small output budget returns an empty `content` with the text stranded in `reasoning_content` — keep `output` generous. And point OpenCode at one model and leave it there: only one model fits at a time, and because OpenCode opens a session with three parallel requests, a mid-session switch loses one of them to the eviction window. See [switching models](localai.md#troubleshooting).
 
 ## Shared setup
 
@@ -178,13 +182,13 @@ Each produces slow or wrong output rather than an error. All are fixed or worked
 
 | Issue | Symptom | Cause | Fix |
 |---|---|---|---|
-| <a name="ki-metal"></a>**Metal backend compiled in** | About 0.8 tok/s, or a GPU watchdog timeout (`kIOAccelCommandBufferCallbackErrorTimeout`) during image generation | ggml enables Metal on macOS by default, even when the wrapping project's own flag (`SD_METAL=OFF`, `BUILD_TYPE=vulkan`) says otherwise. Metal then claims device 0. | Always pass `-DGGML_METAL=OFF` explicitly. Confirm with `otool -L <binary> \| grep -i metal`, which should print nothing. |
+| <a name="ki-metal"></a>**Metal backend compiled in** | Around 1.9 tok/s for a 4B model, `failed to decode prompt batch, res = -3` on a 512-token prompt, or a GPU watchdog timeout (`kIOAccelCommandBufferCallbackErrorTimeout`) during image generation | ggml enables Metal on macOS by default, even when the wrapping project's own flag (`SD_METAL=OFF`, `BUILD_TYPE=vulkan`) says otherwise. Metal then claims device 0. `ggml-metal` sets `has_simdgroup_mm` from `supportsFamily:MTLGPUFamilyApple7`, which no discrete card reports, so its tiled matmul kernels are skipped and `FLASH_ATTN_EXT` is unsupported. Memory is not the problem: the backend detects `has unified memory = false` and allocates private VRAM buffers correctly. | Always pass `-DGGML_METAL=OFF` explicitly. Confirm with `otool -L <binary> \| grep -i metal`, which should print nothing. |
 | <a name="ki-wrong-device"></a>**Wrong GPU selected** | Gibberish output, or allocation failures | The Intel GPU reports 32 GiB of shared memory against the Radeon's 4 GiB, so "pick the largest GPU" logic chooses it. ollama also passed a device index that was off by one. | Set `GGML_VK_VISIBLE_DEVICES=0`. The ollama fork patches the index. |
 | <a name="ki-subgroup-size"></a>**MoltenVK misreports subgroup size** | Gibberish output, and NaN from hybrid models (Mamba-2, Gated DeltaNet) on the GPU but not on the CPU | MoltenVK 1.4.1 and earlier report a [subgroup](glossary.md#g-subgroup) size of 64, but Metal runs 32. Every shader that relies on subgroups computes over the wrong range. | Upgrade to MoltenVK 1.4.2 or later. The forks also carry shader fixes, which apply automatically on older drivers. |
 | <a name="ki-flash-attention"></a>**Flash attention runs on the CPU** | `-fa on` is about 3.5× slower, and a quantized KV cache is too slow to use | ggml's Vulkan flash-attention path requires subgroup operations that were disabled on AMD Macs, so attention silently fell back to the CPU | The forks run flash attention on the GPU. Generation goes from 10.2 to 40.4 tok/s, and a q4_0 KV cache costs only about 4%. |
 | <a name="ki-q8-0"></a>**q8_0 wrong on two GPU paths** | Wrong results with a q8_0 KV cache under flash attention (337 `test-backend-ops` failures) | MoltenVK mistranslates one shader construct that only these q8_0 paths use | The forks route q8_0 to correct paths. On other builds, use an f16 or q4_0 KV cache. |
 | <a name="ki-diffusion-noise"></a>**Images are colourful noise** | Every generated image is full-frame noise | The default GPU convolution (im2col) is numerically wrong on this stack. The root cause has not been found. | Pass `--diffusion-conv-direct`, which is also about 3× faster |
-| <a name="ki-vram"></a>**Out of VRAM** | Sudden slowdowns, failure at the last step of image generation, or empty completions from a second model | 4 GB is the hard limit. About 4278 MB is usable. | Quantize, size the context from the [model tables](models.md), load one model per session, and run the VAE on the CPU for SDXL |
+| <a name="ki-vram"></a>**Out of VRAM** | Sudden slowdowns, failure at the last step of image generation, or a failed request when a second model is requested | 4 GB is the hard limit. About 4278 MB is usable. Only one model is resident; LocalAI evicts the previous one, and requests in flight during that window fail. | Quantize, size the context from the [model tables](models.md), switch models only between requests, and run the VAE on the CPU for SDXL |
 
 MoltenVK 1.4.2 is the single most valuable upgrade: with it, clean upstream ggml passes `MUL_MAT`, `SSM_SCAN` and `GATED_DELTA_NET` on the Radeon unpatched. The forks remain necessary for GPU flash attention, the q8_0 guards and the integer-dot speed-up.
 
@@ -208,7 +212,7 @@ All [Q4_K_M](glossary.md#g-quant), running fully on the GPU:
 
 | Use case | Model | Why |
 |---|---|---|
-| General chat and tool calling | **Qwen3-4B-Instruct-2507** | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 35K with q4_0. |
+| General chat and tool calling | **Qwen3-4B-Instruct-2507** | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 24K with q4_0. |
 | Maths and reasoning | **Qwen3.5-4B** | Best on MATH-500 (0.81) and GPQA Diamond (0.56). 34 tok/s. |
 | Broad knowledge, quality first | **Gemma-4-E4B** | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
 | Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, fastest prefill (149 pp512) — in 1.65 GB. |
@@ -252,6 +256,7 @@ git submodule update --remote ggml     # move a submodule to its branch tip
 | [ggml.md](ggml.md) · [llama.cpp.md](llama.cpp.md) · [stable-diffusion.cpp.md](stable-diffusion.cpp.md) · [ollama.md](ollama.md) · [localai.md](localai.md) | Tool guides: build, run, verify, performance and troubleshooting |
 | [models.md](models.md) | Model speed, VRAM and context ceilings, capability scores, and recommendations |
 | [localai-models/](localai-models/) | Ready-to-use LocalAI model YAML files for the recommended models |
+| [opencode-agents/](opencode-agents/) | OpenCode agents that route each phase of a task to the model measured best at it |
 | [benchmarking.md](benchmarking.md) | How to measure this machine, and how each benchmark was run |
 | [hardware.md](hardware.md) | The ggml capability line, and AMD GPU generations |
 | [glossary.md](glossary.md) | Definitions of every term used, with references |

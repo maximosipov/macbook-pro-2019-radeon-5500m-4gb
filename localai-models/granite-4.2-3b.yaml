@@ -1,0 +1,29 @@
+# Granite-4.2-3B — the dense Granite, included for comparison.
+#
+# IBM's August 2026 dense GQA model. It scores at or below the older 4.0 hybrid
+# on every capability benchmark measured here (MMLU-Pro 0.29 against 0.39,
+# GPQA 0.22 against 0.26, BFCL AST 0.65 against 0.86) and, being dense, gives up
+# the hybrid's memory advantage: 64K here against the 4.0 hybrid's full 128K.
+#
+# Prefer granite-4.0-h-micro.yaml for agent work. This config is here so the
+# comparison is reproducible, not because the model wins anything on this card.
+#
+# Fit: 2.48 GB weights against 4278 MB usable. 40.2 tok/s.
+
+name: granite-4.2-3b
+backend: llama-cpp
+description: Granite 4.2 3B (dense GQA, 64K context, q4_0 KV). Dense sibling of the 4.0 hybrid; lower scores, less context.
+
+parameters:
+  model: granite-4.2-3b-Q4_K_M.gguf
+
+# Measured ceiling. 65536 runs at 41.3 t/s against a 40.9 t/s baseline at 4K;
+# 81920 spills to 0.8 t/s. Trained for 128K, so VRAM binds well before the
+# model does.
+context_size: 65536
+
+gpu_layers: 99
+f16: true
+flash_attention: "true"
+cache_type_k: q4_0
+cache_type_v: q4_0

@@ -11,14 +11,16 @@
 
 name: granite-4.0-h-micro
 backend: llama-cpp
-description: Granite 4.0 H-Micro (Mamba-2 hybrid, 32K context, q4_0 KV). Best tool calling on this machine.
+description: Granite 4.0 H-Micro (Mamba-2 hybrid, 128K context, q4_0 KV). Best tool calling on this machine.
 
 parameters:
   model: granite-4.0-h-micro-Q4_K_M.gguf
 
-# 32K is far below this model's ceiling (~292K even at f16 KV) and leaves plenty
-# of room on a 4 GB card. An agent needs ~16K before the conversation starts.
-context_size: 32768
+# Its whole trained window, measured: 131072 runs at 40.5 t/s, above its own
+# 4K baseline. Only 4 of 40 layers are attention, so the cache grows at about
+# 8 KiB/token and VRAM never becomes the limit — the model runs out of trained
+# context first. Nothing is gained by setting this lower.
+context_size: 131072
 
 gpu_layers: 99            # all layers on the Radeon; anything less pays a PCIe hop per token
 f16: true
