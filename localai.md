@@ -1,6 +1,6 @@
 # LocalAI
 
-One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. One patch, but most of the work is composing the Vulkan build by hand.
+One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. One source patch plus the app, but most of the work is composing the Vulkan build by hand.
 
 | | |
 |---|---|
@@ -8,7 +8,7 @@ One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. 
 | **Use it for** | Pointing a coding agent or any OpenAI SDK at this machine |
 | **Fork and branch** | [`maximosipov/LocalAI`, `macbook-pro-2019-radeon-5500m-4gb`](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb) |
 | **Upstream** | [mudler/LocalAI](https://github.com/mudler/LocalAI) |
-| **Source changes** | 1 commit (VRAM detection). Plus build composition, wrapper scripts and an app bundle. |
+| **Source changes** | 2 commits: VRAM detection, and the menu-bar app with its packaging script. Plus build composition and wrapper scripts. |
 | **Pinned llama.cpp** | `785322d17` (see `backend/cpp/llama-cpp/Makefile`) |
 | **Verified with** | LocalAI `98a562d33` (v4.12.0 plus the VRAM patch), gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24.11, CMake 3.27.0, MoltenVK 1.4.2, macOS 26.6.2: chat, decisions and images, through the rebuilt menu-bar app. The measurements in [Performance](#performance) date from LocalAI `ecdb321` on macOS 14.8.2 |
 | **Decision models** | Kev-4B over `/v1/systemone` on the Radeon; see [Decision models](#decision-models) |
@@ -36,7 +36,7 @@ The rest is not source but composition. LocalAI's macOS build targets Apple Sili
 1. The llama backend is a separate gRPC server process built from a pinned llama.cpp; substitute one built from that pin with the [ten Vulkan fix commits](llama.cpp.md#changes-on-this-branch) cherry-picked on.
 2. The backend is a child process, so a wrapper script must carry the MoltenVK environment into it.
 
-Two Makefile traps silently produce a Metal build instead; both are covered in [Build](#build). The branch also adds the menu-bar app and its packaging script.
+Two Makefile traps silently produce a Metal build instead; both are covered in [Build](#build). The branch also adds the menu-bar app and its packaging script, in `contrib/macos-radeon-app/` (see [Package the app](#package-the-app)).
 
 ## Build
 
@@ -113,7 +113,7 @@ Check: `otool -L backend/go/stablediffusion-ggml/libgosd-fallback.so` must list 
 
 ### Package the app
 
-The branch adds a menu-bar (`NSStatusItem`) app with no Dock icon that owns the server process: it starts the server with the MoltenVK environment and device pin set, polls `/readyz` for its status line, and offers Open WebUI, Copy API Base URL, Open Models Folder, Show Log, Restart and Quit.
+The branch adds a menu-bar (`NSStatusItem`) app with no Dock icon, in [`contrib/macos-radeon-app/`](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb/contrib/macos-radeon-app), that owns the server process: it starts the server with the MoltenVK environment and device pin set, polls `/readyz` for its status line, and offers Open WebUI, Copy API Base URL, Open Models Folder, Show Log, Restart and Quit.
 
 Two things fail silently if wrong:
 
@@ -121,6 +121,14 @@ Two things fail silently if wrong:
 - **Make the bundle self-contained.** `grpc-server` links **107 Homebrew dylibs**, against two for the ollama DMG. The packaging script walks that dependency closure with `otool`, copies each library into `Contents/Frameworks/`, rewrites every install name to `@rpath`, and adds the matching rpaths. The bundled ICD JSON points at `../../Frameworks/libMoltenVK.dylib` so the app stays relocatable. The acceptance test is that no Homebrew path survives anywhere in the bundle.
 
 The app also passes `--addons-enabled=false`, which v4.12 needs to start (see [Build](#build)).
+
+Build `./local-ai` and both Vulkan backends first, then:
+
+```bash
+MODELS_SEED=../localai-models contrib/macos-radeon-app/build-app.sh   # -> dist/macos-app/LocalAI-M.dmg
+```
+
+`MODELS_SEED` points at the [model configs](localai-models/) to seed into the app; it is optional. `LOCALAI_DIR` packages builds from another LocalAI tree.
 
 The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Rebuilt on v4.12 on 4 November 2026 (109 bundled dylibs, 143 MB DMG) and checked through the app: a correct chat answer from Qwen3-4B-2507, a Kev-4B decision on `/v1/systemone`, and a recognisable SD-Turbo image, 37.6 s for the first call. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present.
 
