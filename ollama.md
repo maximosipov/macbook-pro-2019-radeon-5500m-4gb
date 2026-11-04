@@ -55,6 +55,8 @@ LLAMA_TAG="$(cat ../ollama-radeon/LLAMA_CPP_VERSION)"
 LLAMA_SHA="$(git ls-remote https://github.com/ggml-org/llama.cpp.git "refs/tags/$LLAMA_TAG" | cut -f1)"
 git fetch https://github.com/ggml-org/llama.cpp.git "$LLAMA_SHA"
 git checkout -b radeon-for-ollama "$LLAMA_SHA"
+# The fork branch was rebased on 2026-11-04; these pre-rebase commits live on a tag.
+git fetch origin tag radeon-pre-rebase-2026-11-04
 git cherry-pick 7847fca13 595936bcd a91f29c5f acb45b872 8cbd19056 \
                 8e8d7fb26 16ea5d8e7 e629266a1 2707498b9 268aff1aa
 git submodule update --init --recursive --depth 1

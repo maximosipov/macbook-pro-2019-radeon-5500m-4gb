@@ -35,19 +35,29 @@ The [same nine Vulkan changes as ggml](ggml.md#changes-on-this-branch), since ll
 The [ollama](ollama.md#build) and [LocalAI](localai.md#build) recipes cherry-pick exactly this list onto their own pinned commits, because neither can build from this branch tip:
 
 ```
-7847fca13  matmul subgroup correctness (RDNA1 and older Intel GPUs)
-595936bcd  NaN from SSM_SCAN and GATED_DELTA_NET
-a91f29c5f  diagnostic environment switches
-acb45b872  disable subgroup clustered operations (the q8_1 activation quantizer)
-8cbd19056  emulated integer dot for matmul: +68% prefill
-8e8d7fb26  GGML_VK_FA_NO_SUBGROUPS diagnostic switch
-16ea5d8e7  run flash attention on the GPU
-e629266a1  guard the broken q8_0 mul_mat_vecq path
-2707498b9  trust MoltenVK subgroups from 1.4.2 onwards
-268aff1aa  keep q8_0 off the flash-attention MMQ path
+596f1b8d1  matmul subgroup correctness (RDNA1 and older Intel GPUs)
+ac2993987  NaN from SSM_SCAN and GATED_DELTA_NET
+5cff7ef12  diagnostic environment switches
+89076c4e5  disable subgroup clustered operations (the q8_1 activation quantizer)
+e671e754d  emulated integer dot for matmul: +68% prefill
+7723fc8be  GGML_VK_FA_NO_SUBGROUPS diagnostic switch
+22d8de9f4  run flash attention on the GPU
+d190dfead  guard the broken q8_0 mul_mat_vecq path
+2fde960d2  trust MoltenVK subgroups from 1.4.2 onwards
+0653a3821  keep q8_0 off the flash-attention MMQ path
 ```
 
-All ten apply cleanly to ollama's pinned `b10091` and LocalAI's pinned `1cbfd1988`.
+All ten apply cleanly to LocalAI's pinned `785322d17`.
+
+**Rebased onto upstream on 4 November 2026**, to pick up llama.cpp's native [decision model](decision-models.md) support. One commit, the diagnostic switches, needed a hand merge in `ggml-vulkan.cpp`, where upstream had rewritten the RDNA3/4 tuning code beside it. Re-verified on the rebased branch before publishing:
+
+| Check | Result |
+|---|---|
+| `test-backend-ops -b Vulkan0` | `MUL_MAT` 2426/2426, `MUL_MAT_ID` 1109/1109, `FLASH_ATTN_EXT` 5368/5368, `SSM_SCAN` 12/12, `GATED_DELTA_NET` 43/43 |
+| `llama-bench`, pp512 / tg128 | Qwen3-4B-2507 60.0 / 40.1, Qwen3.5-4B 60.7 / 33.4, Granite-4.0-H-Micro 87.4 / 41.7, LFM2.5-2.6B 122.5 / 57.2: all within noise of [models.md](models.md#speed-and-fit). Gemma-4-E2B 455.2 / 51.9: prefill is 3× the documented 148.8, an upstream gain not yet reflected in models.md |
+| Chat answer, three architectures | Correct and coherent on Qwen3-4B-2507, Qwen3.5-4B and Gemma-4-E2B |
+
+The pre-rebase branch is kept as the tag `radeon-pre-rebase-2026-11-04`. Its versions of the ten commits (`7847fca13` … `268aff1aa`) are the ones the [ollama](ollama.md#build) recipe cherry-picks onto ollama's older pin `b10091`.
 
 ## Build
 

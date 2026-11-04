@@ -9,9 +9,9 @@ One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. 
 | **Fork and branch** | [`maximosipov/LocalAI`, `macbook-pro-2019-radeon-5500m-4gb`](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb) |
 | **Upstream** | [mudler/LocalAI](https://github.com/mudler/LocalAI) |
 | **Source changes** | 1 commit (VRAM detection). Plus build composition, wrapper scripts and an app bundle. |
-| **Pinned llama.cpp** | `1cbfd1988` (see `backend/cpp/llama-cpp/Makefile`) |
-| **Verified with** | LocalAI `ecdb321`, gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24, CMake 3.27.0, MoltenVK 1.4.2, macOS 14.8.2 |
-| **Decision models** | Kev-4B over `/v1/systemone` on the Radeon, with LocalAI v4.12 and a rebuilt backend; tested on a local rebase, see [Decision models](#decision-models) |
+| **Pinned llama.cpp** | `785322d17` (see `backend/cpp/llama-cpp/Makefile`) |
+| **Verified with** | LocalAI `98a562d33` (v4.12.0 plus the VRAM patch), gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24.11, CMake 3.27.0, MoltenVK 1.4.2, macOS 26.6.2: chat, decisions and images, through the rebuilt menu-bar app. The measurements in [Performance](#performance) date from LocalAI `ecdb321` on macOS 14.8.2 |
+| **Decision models** | Kev-4B over `/v1/systemone` on the Radeon; see [Decision models](#decision-models) |
 | **Runbook on the branch** | [RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md](https://github.com/maximosipov/LocalAI/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md) |
 
 Complete the [shared setup](README.md#shared-setup) first. Terms are defined in the [glossary](glossary.md).
@@ -41,11 +41,13 @@ Two Makefile traps silently produce a Metal build instead; both are covered in [
 ## Build
 
 ```bash
-brew install go node cmake grpc protobuf abseil
+brew install go node cmake grpc protobuf abseil zlib jpeg-turbo
 
 git clone https://github.com/maximosipov/LocalAI.git && cd LocalAI
 make build                          # Go server + React UI -> ./local-ai
 ```
+
+The server built this way must be started with `--addons-enabled=false`. Otherwise it exits at startup with `addon runtime unavailable or invalid protocol`: v4.12's add-ons need a runtime that `make build` doesn't appear to produce. Nothing here uses add-ons.
 
 > If you cloned this repository recursively, the LocalAI fork is already at `LocalAI/` on the right branch: `cd LocalAI && make build`, and skip the clone. The `llama.cpp/` submodule does **not** replace the backend checkout below.
 
@@ -61,8 +63,8 @@ cd backend/cpp/llama-cpp/llama.cpp
 # ancestor of the fork's branch, so a fork-only clone will not have it.
 git fetch https://github.com/ggml-org/llama.cpp.git "$PIN"
 git checkout -b build "$PIN"
-git cherry-pick 7847fca13 595936bcd a91f29c5f acb45b872 8cbd19056 \
-                8e8d7fb26 16ea5d8e7 e629266a1 2707498b9 268aff1aa
+git cherry-pick 596f1b8d1 ac2993987 5cff7ef12 89076c4e5 e671e754d \
+                7723fc8be 22d8de9f4 d190dfead 2fde960d2 0653a3821
 git submodule update --init --recursive --depth 1
 cd ../../../..
 
@@ -118,7 +120,9 @@ Two things fail silently if wrong:
 - **Pass the storage paths explicitly.** LocalAI resolves its data, backends and configuration directories *relative to the working directory*. An app bundle launches with `cwd=/`, so the data path becomes `//data` and the server exits with `read-only file system`, with nothing in the UI to say why. The app passes `--backends-path`, `--localai-config-dir`, `--generated-content-path` and `LOCALAI_DATA_PATH` under `~/Library/Application Support/LocalAI/`.
 - **Make the bundle self-contained.** `grpc-server` links **107 Homebrew dylibs**, against two for the ollama DMG. The packaging script walks that dependency closure with `otool`, copies each library into `Contents/Frameworks/`, rewrites every install name to `@rpath`, and adds the matching rpaths. The bundled ICD JSON points at `../../Frameworks/libMoltenVK.dylib` so the app stays relocatable. The acceptance test is that no Homebrew path survives anywhere in the bundle.
 
-The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present.
+The app also passes `--addons-enabled=false`, which v4.12 needs to start (see [Build](#build)).
+
+The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Rebuilt on v4.12 on 4 November 2026 (109 bundled dylibs, 143 MB DMG) and checked through the app: a correct chat answer from Qwen3-4B-2507, a Kev-4B decision on `/v1/systemone`, and a recognisable SD-Turbo image, 37.6 s for the first call. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present.
 
 Installing it: [quick start](README.md#quick-start-localai-and-opencode).
 
@@ -156,7 +160,7 @@ gpu_layers: 99
 flash_attention: "true"
 EOF
 
-./local-ai run --address 127.0.0.1:8085 --models-path ./models \
+./local-ai run --address 127.0.0.1:8085 --models-path ./models --addons-enabled=false \
   --external-grpc-backends "llama-cpp:$PWD/backend/cpp/llama-cpp/run-vulkan.sh"
 ```
 
@@ -197,7 +201,7 @@ options:
 - "wtype:q8_0"
 EOF
 
-./local-ai run --address 127.0.0.1:8080 --models-path ./models \
+./local-ai run --address 127.0.0.1:8080 --models-path ./models --addons-enabled=false \
   --external-grpc-backends "llama-cpp:$PWD/backend/cpp/llama-cpp/run-vulkan.sh,stablediffusion-ggml:$PWD/backend/go/stablediffusion-ggml/run-vulkan.sh"
 
 curl -s http://127.0.0.1:8080/v1/images/generations -H 'Content-Type: application/json' -d '{
@@ -248,51 +252,13 @@ It is a 3B-class model. Asked for a one-liner counting lines across `.md` files 
 
 ## Decision models
 
-LocalAI serves [decision models](decision-models.md) through `/v1/systemone`, the request shape Kev and Ollama use, from v4.11. v4.12 adds an OpenAI-style `/v1/decisions` and decisions in the `llama-cpp` backend. The decision code itself is llama.cpp's (`server-decision.cpp`, upstream since 2 October 2026); LocalAI's backend forwards to it. The fork branch above predates both, so this needs a newer server **and** a newer backend.
+LocalAI serves [decision models](decision-models.md) through `/v1/systemone`, the request shape Kev and Ollama use, from v4.11. v4.12 adds an OpenAI-style `/v1/decisions` and decisions in the `llama-cpp` backend. The decision code itself is llama.cpp's (`server-decision.cpp`, upstream since 2 October 2026); LocalAI's backend forwards to it.
 
-> **Tested 4 November 2026** on a local rebase onto upstream LocalAI `v4.12.0-548` (`81a56608d`). The fork branch has not been moved yet. Until it is, build from upstream master with the one patch on top, as below.
+> **Tested 4 November 2026** on the fork branch at `98a562d33`, upstream LocalAI `v4.12.0-548` plus the VRAM patch.
 
-### Build the server
-
-```bash
-cd LocalAI
-git fetch https://github.com/mudler/LocalAI.git master
-git checkout -b decisions FETCH_HEAD
-git cherry-pick 36540448d     # VRAM detection: upstream still probes Apple Silicon GPUs only
-make build
-```
-
-The patch applies without conflicts.
-
-### Build the backend
-
-Follow [The llama.cpp backend](#the-llamacpp-backend), with three differences.
-
-**The pin is newer, and one cherry-pick conflicts.** The Makefile now pins `785322d17`. Of the ten fix commits, `a91f29c5f` (the diagnostic env knobs) conflicts in `ggml/src/ggml-vulkan/ggml-vulkan.cpp`, because upstream rewrote the RDNA3/4 rows-per-workgroup code beside it. Keep upstream's side of the hunk, add the commit's two overrides above it, then `git add` and `git cherry-pick --continue`:
-
-```cpp
-    // mac-radeon-ai: rows-per-workgroup overrides for tuning. rm_kq drives the
-    // K-quant matvec (q4_K/q6_K), which is ~54% of decode time on this stack.
-    if (const char * e = getenv("GGML_VK_RM_KQ"))   { rm_kq   = atoi(e); }
-    if (const char * e = getenv("GGML_VK_RM_STDQ")) { rm_stdq = atoi(e); }
-    // RDNA3/4: above four columns, static 4 rows ...   (upstream's code continues unchanged)
-```
-
-The other nine apply cleanly. The result is identical to the tree the measurements below were taken on.
-
-**Two more libraries.** The decision bridge validates image input and links zlib and libjpeg even for text-only models:
-
-```bash
-brew install zlib jpeg-turbo
-```
-
-**`prepare.sh` stages more.** Besides applying LocalAI's llama.cpp patches as before, it copies the decision bridge (`decision_compat.h`, `decision_images.h`) beside `grpc-server.cpp`. It is still run once.
-
-Build with the same `BUILD_TYPE` and `CMAKE_ARGS` as before; it takes about 4 minutes. Check: `otool -L backend/cpp/llama-cpp/grpc-server` lists `libvulkan`, `libjpeg` and `libz`, and nothing matching `metal`.
+A server and backend built as in [Build](#build) are all it needs: the branch is on v4.12, and its pinned llama.cpp `785322d17` includes native decisions. `prepare.sh` stages the decision bridge (`decision_compat.h`, `decision_images.h`) beside `grpc-server.cpp`, and the bridge is why the backend now needs zlib and libjpeg. A backend built from an older pin answers decision requests with `501`.
 
 ### Run
-
-The upstream server exits at startup with `addon runtime unavailable or invalid protocol` unless add-ons are turned off; `make build` doesn't appear to produce the add-on runtime. Decisions don't use it.
 
 ```bash
 ln -s /path/to/Kev-4B-Q4_K_M.gguf models/     # ggml-org/Kev-4B-GGUF
@@ -347,7 +313,6 @@ What doesn't work here:
 
 - **Jeva-4B.** Neither LocalAI nor llama.cpp supports it.
 - **The `vllm-cpp` backend.** On macOS it is packaged only for Apple Silicon, and its Vulkan engine keeps weights in system RAM on a discrete card. See [Runtime paths](decision-models.md#runtime-paths).
-- **The menu-bar app** has not been rebuilt on v4.12. Its launch arguments would need `--addons-enabled=false` too.
 
 ## Verify
 

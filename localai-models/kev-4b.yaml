@@ -1,0 +1,31 @@
+# Kev-4B — the calibrated decision model.
+#
+# Not a chat model: it answers typed choice, noul and score questions on
+# /v1/systemone and /v1/decisions, with no text generated. 0.745 on the
+# JevBench public split and the best calibration measured here (ECE 0.043), so
+# its probabilities can be thresholded without fitting a temperature. 2.3 s
+# median per decision, longer on long states. See decision-models.md.
+#
+# Needs LocalAI v4.12 or later and a llama-cpp backend built from llama.cpp
+# with native decision support (upstream since 2 October 2026): see
+# localai.md#decision-models. An older backend answers 501.
+#
+# Fit: 2.88 GB of weights, about 3.7 GB resident with the KV cache and compute
+# buffers. It takes the card, so a worker model cannot sit beside it.
+
+name: kev-4b
+backend: llama-cpp
+description: Kev-4B (Qwen3.5-4B + pointer head) decision model, Q4_K_M. Calibrated typed decisions on /v1/systemone.
+
+known_usecases:
+  - decisions
+
+parameters:
+  model: Kev-4B-Q4_K_M.gguf
+
+# As tested. Each JevBench state is under about 4K tokens; the ceiling has not
+# been swept.
+context_size: 8192
+
+gpu_layers: 99
+flash_attention: "true"

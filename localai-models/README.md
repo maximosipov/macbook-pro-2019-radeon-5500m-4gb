@@ -13,6 +13,7 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |
 | `qwen3.5-4b.yaml` | Qwen3.5-4B | 96K | Best maths and reasoning. A thinking model. |
 | `smollm3-3b.yaml` | SmolLM3-3B | 64K | Fully open training recipe. **No tool calls.** |
+| `kev-4b.yaml` | Kev-4B | 8K | **A decision model, not a chat model**: typed answers on `/v1/systemone`, calibrated. Needs LocalAI v4.12 and a rebuilt backend ([localai.md](../localai.md#decision-models)). |
 | `sd-turbo.yaml` | SD-Turbo | — | Everyday image generation, 4 steps |
 | `sd-1.5.yaml` | SD 1.5 | — | Baseline, best LoRA and ControlNet ecosystem |
 | `sdxl-turbo.yaml` | SDXL-Turbo | — | Most photorealistic; at the edge of 4 GB |
@@ -42,6 +43,7 @@ Weights are referenced by filename and must live inside the models folder: Local
 | `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | [Qwen/Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507-GGUF) |
 | `Qwen3.5-4B-Q4_K_M.gguf` | [bartowski/Qwen_Qwen3.5-4B-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF) |
 | `SmolLM3-Q4_K_M.gguf` | [bartowski/HuggingFaceTB_SmolLM3-3B-GGUF](https://huggingface.co/bartowski/HuggingFaceTB_SmolLM3-3B-GGUF) |
+| `Kev-4B-Q4_K_M.gguf` | [ggml-org/Kev-4B-GGUF](https://huggingface.co/ggml-org/Kev-4B-GGUF) |
 | `sd_turbo.safetensors` | [stabilityai/sd-turbo](https://huggingface.co/stabilityai/sd-turbo) |
 | `v1-5-pruned-emaonly-fp16.safetensors` | [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) |
 | `sd_xl_turbo_1.0_fp16.safetensors` | [stabilityai/sdxl-turbo](https://huggingface.co/stabilityai/sdxl-turbo) |
@@ -116,6 +118,8 @@ Two different levels of testing sit behind these files.
 | `sdxl-turbo` | Recognisable apple, not noise | — | 221.9 s, first call |
 
 That run predates the context changes above, so its throughput figures were taken at the older, narrower settings.
+
+**Decisions, run through LocalAI v4.12 end to end** on 4 November 2026: `kev-4b` answered a three-question `/v1/systemone` request (choice, noul, score) and a `/v1/decisions` request, with every layer on the Radeon and probabilities identical to a direct `llama-server` run. Its JevBench accuracy and calibration are in [decision-models.md](../decision-models.md#results). It uses only two of the five text settings below, `gpu_layers` and `flash_attention`: no KV quantization was tested, and its context is the one it was run at, not a swept ceiling.
 
 **Context fit measured with `llama-cli`, not yet run through LocalAI**: `gemma-4-e2b`, `gemma-4-e4b`, `granite-4.2-3b`, `phi-4-mini`, `smollm3-3b`. The backend and flags are identical to the four verified configs, so these are expected to work, but nothing has exercised them over the API.
 
