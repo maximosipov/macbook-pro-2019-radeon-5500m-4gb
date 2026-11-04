@@ -56,6 +56,20 @@ What the results say:
 - **The CPU is about as fast as the Radeon here.** Kev-4B and Jeva-4B in fp32 PyTorch take about the same time per decision as Qwen3.5-4B in llama.cpp on the GPU (3.1–3.7 s median), and a full pass took about 50 minutes against 45. Kev-4B on the Radeon is faster on short states (2.3 s median) but slower on long hard ones (15.2 s against 11.9 s), so its full pass took 56 minutes. Kev-0.8B is the fastest model measured at 0.6 s, and it leaves the GPU free for the model doing the work.
 - **LFM2.5-2.6B's result is invalid, not low.** The option letters carry none of its next-token probability (letter mass 0.000), so the readout is reading noise. It needs a different answer format before it can be scored.
 
+### d1-2B: partial result and batch limit
+
+[Liquid AI d1-2B](https://huggingface.co/LiquidAI/d1-2B) is a 1.92B-parameter text and vision decision model, built on LFM3-VL-2B and released under LFM Open License v1.0. The official [Q4_K_M GGUF](https://huggingface.co/LiquidAI/d1-2B-GGUF) was tested on 4 November with the forked llama.cpp `821a0ad27`, Vulkan on the Radeon, 8K context and flash attention. This is a **partial** JevBench run, not an overall score:
+
+| Tier | Completed | Correct | Median per decision |
+|---|---:|---:|---:|
+| Easy | 48 / 48 | 48 / 48 | 0.73 s |
+| Standard | 72 / 72 | 69 / 72 | 1.06 s |
+| Hard | 1 / 111 | 1 / 1 | 34.7 s |
+
+The model reads each question in a single physical batch. With llama-server's default 512-token physical batch, longer questions returned HTTP 500. A rerun at `-b 4096 -ub 4096` completed the easy and standard tiers and one 3,687-token hard question, then lost the Vulkan device on the next hard question. The remaining 110 hard requests failed after device loss; these are failures, not wrong answers, and do not support an overall score, calibration estimate or ranking. Startup GPU allocation was about 1.78 GB; fitting the weights and buffers does not establish reliability under a long prompt. The failure's cause is unconfirmed.
+
+The [LocalAI profile](localai-models/d1-2b.yaml) was checked on a short text request with the default 512-token batch. It returns typed `choice`, `noul` and `score` answers; image/video input and longer LocalAI batches were not tested. No projector is configured in that profile. The card documents additional model capabilities, but llama.cpp currently supports only a subset. See [LocalAI](localai.md#lfm3-and-d1-2b) for the batch limit.
+
 ## Candidates
 
 | Model | Maker | Built on | Weights | On this machine | Verdict |

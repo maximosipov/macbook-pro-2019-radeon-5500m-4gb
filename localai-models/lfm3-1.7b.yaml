@@ -1,0 +1,10 @@
+# LFM3-1.7B text model. Context is a conservative starting point, not a measured ceiling.
+# Leave room for reasoning in the output budget: 32 tokens returned no visible answer.
+name: lfm3-1.7b
+backend: llama-cpp
+description: Liquid AI LFM3-1.7B text model, Q4_K_M.
+parameters:
+  model: LFM3-1.7B-Q4_K_M.gguf
+context_size: 8192
+gpu_layers: 99
+flash_attention: "true"

@@ -1,6 +1,6 @@
 # LocalAI model configs
 
-LocalAI model YAML files for every model analysed in [models.md](../models.md), each set to the largest context measured to fit this card — read [the caveat on allocation ceilings](#maximum-context-measured) before trusting a wide one. Server setup: [localai.md](../localai.md).
+LocalAI model YAML files for every model analysed in [models.md](../models.md), with context settings described below — read [the caveat on allocation ceilings](#maximum-context-measured) before trusting a wide one. Server setup: [localai.md](../localai.md).
 
 | File | Model | Context | Notes |
 |---|---|---|---|
@@ -8,6 +8,8 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 | `gemma-4-e4b.yaml` | Gemma-4-E4B | 64K | Best broad knowledge and the only 1.000 on MRCR. Slowest. Verified under load. |
 | `granite-4.0-h-micro.yaml` | Granite-4.0-H-Micro | 128K | Best tool calling. The pick for agents and unattended work. |
 | `granite-4.2-3b.yaml` | Granite-4.2-3B | 64K | Dense sibling of the 4.0 hybrid. Scores lower on everything here. |
+| `lfm3-1.7b.yaml` | LFM3-1.7B | 8K | Text model; conservative initial context, not a measured ceiling. |
+| `d1-2b.yaml` | d1-2B | 8K | Decision model; tested for text questions. Single-pass requests must fit the physical batch. |
 | `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest and smallest. Scores 0.000 on MRCR. |
 | `phi-4-mini.yaml` | Phi-4-mini | 56K | Only model above zero on LongBench. **No tool calls.** |
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |
@@ -38,6 +40,8 @@ Weights are referenced by filename and must live inside the models folder: Local
 | `gemma-4-E4B-it-Q4_K_M.gguf` | [bartowski/google_gemma-4-E4B-it-GGUF](https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF) |
 | `granite-4.0-h-micro-Q4_K_M.gguf` | [ibm-granite/granite-4.0-h-micro-GGUF](https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF) |
 | `granite-4.2-3b-Q4_K_M.gguf` | [ibm-granite/granite-4.2-3b-GGUF](https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF) |
+| `LFM3-1.7B-Q4_K_M.gguf` | [LiquidAI/LFM3-1.7B-GGUF](https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF) |
+| `d1-2B-Q4_K_M.gguf` | [LiquidAI/d1-2B-GGUF](https://huggingface.co/LiquidAI/d1-2B-GGUF) |
 | `LFM2.5-2.6B-Q4_K_M.gguf` | [LiquidAI/LFM2.5-2.6B-GGUF](https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF) |
 | `Phi-4-mini-instruct-Q4_K_M.gguf` | [bartowski/microsoft_Phi-4-mini-instruct-GGUF](https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF) |
 | `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | [Qwen/Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507-GGUF) |
@@ -54,7 +58,7 @@ ln -s /path/to/weights.gguf ~/Library/Application\ Support/LocalAI/models/
 
 ## Maximum context, measured
 
-Every `context_size` here is the largest window the model holds without spilling its KV cache to host RAM, found by loading each model at descending context sizes and comparing generation throughput against its own rate at 4K. A spill is unmistakable — throughput collapses by a factor of 30 or more — so the ceiling is sharp rather than a judgement call.
+Except for the new 8K LFM3 and d1 starting profiles, each `context_size` here is the largest window the model holds without spilling its KV cache to host RAM, found by loading each model at descending context sizes and comparing generation throughput against its own rate at 4K. A spill is unmistakable — throughput collapses by a factor of 30 or more — so the ceiling is sharp rather than a judgement call.
 
 | Model | Context | tok/s there | tok/s at 4K | First size that spilled |
 |---|---|---|---|---|

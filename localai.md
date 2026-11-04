@@ -317,6 +317,12 @@ Measured:
 
 Kev-4B's accuracy and calibration on this path are in [decision-models.md](decision-models.md#results): 0.745 on JevBench, with the best calibration measured.
 
+### LFM3 and d1-2B
+
+The [LFM3-1.7B](localai-models/lfm3-1.7b.yaml) and [d1-2B](localai-models/d1-2b.yaml) profiles use the official Q4_K_M GGUFs. Copy the profiles and link their weights as described in [model configs](localai-models/README.md#install). Both start at 8K context; that is not a measured ceiling. On LocalAI v4.12 with the fork's llama-cpp backend, a text chat request to LFM3 and a text `/v1/systemone` request to d1 succeeded with GPU offload configured. The LocalAI smoke test did not independently measure GPU residency. Use a generous output budget for LFM3: its reasoning can consume the budget before visible text appears.
+
+d1 is a decision model; send `model: "d1-2b"` to `/v1/systemone` with typed questions, as in the example above. The tested LocalAI default batch is 512 tokens, and d1 processes each question in one physical batch. Keep each rendered question and state within that limit; larger batches increase compute memory and need a separate fit test. Liquid AI's [GGUF card](https://huggingface.co/LiquidAI/d1-2B-GGUF) documents supported question types and media; image and video paths have not been tested here. The optional vision projector is not configured by this text-only profile.
+
 What doesn't work here:
 
 - **Jeva-4B.** Neither LocalAI nor llama.cpp supports it.
