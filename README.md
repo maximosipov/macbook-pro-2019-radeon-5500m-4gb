@@ -218,6 +218,7 @@ All [Q4_K_M](glossary.md#g-quant), running fully on the GPU:
 | Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, fastest prefill (149 pp512) — in 1.65 GB. |
 | Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
 | Speed and small footprint | **LFM2.5-2.6B** | Fastest (58 tok/s) and smallest (1.84 GB). Fits its full 128K context. |
+| Decisions (routing, classification) | **Kev-0.8B** on the CPU; **Jeva-4B** when accuracy matters | Typed probabilities instead of text. Kev-0.8B: 0.6 s per decision, well calibrated, and it leaves the GPU to the worker. Jeva-4B: most accurate on JevBench (0.87), 3.7 s, CPU fp32 only. See [decision-models.md](decision-models.md). |
 | Vision | **Qwen3-VL-4B** in ollama | 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512` |
 | Images | **SD-Turbo** at q8_0 | 1.7 s per step in 2 GB. Use SDXL-Turbo for more photorealism. |
 
@@ -255,6 +256,7 @@ git submodule update --remote ggml     # move a submodule to its branch tip
 |---|---|
 | [ggml.md](ggml.md) · [llama.cpp.md](llama.cpp.md) · [stable-diffusion.cpp.md](stable-diffusion.cpp.md) · [ollama.md](ollama.md) · [localai.md](localai.md) | Tool guides: build, run, verify, performance and troubleshooting |
 | [models.md](models.md) | Model speed, VRAM and context ceilings, capability scores, and recommendations |
+| [decision-models.md](decision-models.md) | System One decision models (Jev, Jeva, Kev, SemIf): JevBench accuracy, calibration, permutation and cache results, and runtime paths |
 | [localai-models/](localai-models/) | Ready-to-use LocalAI model YAML files for the recommended models |
 | [opencode-agents/](opencode-agents/) | OpenCode agents that route each phase of a task to the model measured best at it |
 | [benchmarking.md](benchmarking.md) | How to measure this machine, and how each benchmark was run |

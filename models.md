@@ -9,6 +9,7 @@ Which models fit, how fast they run, how much context they hold, and how capable
 - [Capability scores](#capability-scores)
 - [Long-context retrieval](#long-context-retrieval)
 - [Choosing a model for unattended work](#choosing-a-model-for-unattended-work)
+- [Decision models](#decision-models)
 - [Image models](#image-models)
 
 ## At a glance
@@ -406,6 +407,12 @@ Configuration:
 - **Log [`ioreg`](glossary.md#g-ioreg) residency** with job output, so a silent fall back to CPU shows up as a 3× slowdown rather than a mystery.
 
 Scope: tool calling is measured single-turn only. Multi-turn state tracking, recovery after a failed call and long-horizon planning are unmeasured here, and are where 4B-class models are weakest.
+
+## Decision models
+
+[System One](glossary.md#g-system-one) decision models (Jev, Jeva-4B, Kev, SemIf) return a probability over declared options instead of generating text, so a routing or classification step can never return unparseable output. They have a [chapter of their own](decision-models.md), measured on the JevBench public split.
+
+The short version: **Jeva-4B is the most accurate** (0.87 overall, 0.75 on hard items), but it runs only on the CPU in fp32. **Kev-0.8B is the router**: 0.6 s per decision on the CPU and well calibrated, leaving the GPU to the worker model. On the Radeon itself, Qwen3.5-4B read through option logprobs is the best option (0.79). Further questions about a state already in the cache take 1–7 s, against 22–59 s for a new one.
 
 ## Image models
 
