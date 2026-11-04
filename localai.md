@@ -11,6 +11,7 @@ One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. 
 | **Source changes** | 1 commit (VRAM detection). Plus build composition, wrapper scripts and an app bundle. |
 | **Pinned llama.cpp** | `1cbfd1988` (see `backend/cpp/llama-cpp/Makefile`) |
 | **Verified with** | LocalAI `ecdb321`, gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24, CMake 3.27.0, MoltenVK 1.4.2, macOS 14.8.2 |
+| **Decision models** | Kev-4B over `/v1/systemone` on the Radeon, with LocalAI v4.12 and a rebuilt backend; tested on a local rebase, see [Decision models](#decision-models) |
 | **Runbook on the branch** | [RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md](https://github.com/maximosipov/LocalAI/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md) |
 
 Complete the [shared setup](README.md#shared-setup) first. Terms are defined in the [glossary](glossary.md).
@@ -19,7 +20,7 @@ Complete the [shared setup](README.md#shared-setup) first. Terms are defined in 
 
 Many inference backends behind one OpenAI-compatible endpoint:
 
-- **An API well beyond chat** — chat and text completions, embeddings, image generation, audio transcription and text-to-speech, a realtime speech API, vision, reranking and object detection.
+- **An API well beyond chat** — chat and text completions, embeddings, image generation, audio transcription and text-to-speech, a realtime speech API, vision, reranking and object detection. From v4.11, typed [decisions](decision-models.md) too, and on the `llama-cpp` backend from v4.12.
 - **Backends as separate processes** — llama.cpp, vLLM, transformers, diffusers, whisper, piper and others, each a [gRPC server](glossary.md#g-grpc) that LocalAI starts and supervises. That indirection is the whole story of this build.
 - **Galleries** — a model gallery and a backend gallery that installs backends as [OCI images](glossary.md#g-oci), with a web UI over both.
 - **Agent-side features** — constrained grammars, tool calling, MCP support and built-in agents.
@@ -245,6 +246,109 @@ The first turn is expensive and the rest are not: the agent's system prompt is [
 
 It is a 3B-class model. Asked for a one-liner counting lines across `.md` files it produced a command that counts files; asked what `-ngl` does it answered that it "disables the NVIDIA GPU library". Read what it produces.
 
+## Decision models
+
+LocalAI serves [decision models](decision-models.md) through `/v1/systemone`, the request shape Kev and Ollama use, from v4.11. v4.12 adds an OpenAI-style `/v1/decisions` and decisions in the `llama-cpp` backend. The decision code itself is llama.cpp's (`server-decision.cpp`, upstream since 2 October 2026); LocalAI's backend forwards to it. The fork branch above predates both, so this needs a newer server **and** a newer backend.
+
+> **Tested 4 November 2026** on a local rebase onto upstream LocalAI `v4.12.0-548` (`81a56608d`). The fork branch has not been moved yet. Until it is, build from upstream master with the one patch on top, as below.
+
+### Build the server
+
+```bash
+cd LocalAI
+git fetch https://github.com/mudler/LocalAI.git master
+git checkout -b decisions FETCH_HEAD
+git cherry-pick 36540448d     # VRAM detection: upstream still probes Apple Silicon GPUs only
+make build
+```
+
+The patch applies without conflicts.
+
+### Build the backend
+
+Follow [The llama.cpp backend](#the-llamacpp-backend), with three differences.
+
+**The pin is newer, and one cherry-pick conflicts.** The Makefile now pins `785322d17`. Of the ten fix commits, `a91f29c5f` (the diagnostic env knobs) conflicts in `ggml/src/ggml-vulkan/ggml-vulkan.cpp`, because upstream rewrote the RDNA3/4 rows-per-workgroup code beside it. Keep upstream's side of the hunk, add the commit's two overrides above it, then `git add` and `git cherry-pick --continue`:
+
+```cpp
+    // mac-radeon-ai: rows-per-workgroup overrides for tuning. rm_kq drives the
+    // K-quant matvec (q4_K/q6_K), which is ~54% of decode time on this stack.
+    if (const char * e = getenv("GGML_VK_RM_KQ"))   { rm_kq   = atoi(e); }
+    if (const char * e = getenv("GGML_VK_RM_STDQ")) { rm_stdq = atoi(e); }
+    // RDNA3/4: above four columns, static 4 rows ...   (upstream's code continues unchanged)
+```
+
+The other nine apply cleanly. The result is identical to the tree the measurements below were taken on.
+
+**Two more libraries.** The decision bridge validates image input and links zlib and libjpeg even for text-only models:
+
+```bash
+brew install zlib jpeg-turbo
+```
+
+**`prepare.sh` stages more.** Besides applying LocalAI's llama.cpp patches as before, it copies the decision bridge (`decision_compat.h`, `decision_images.h`) beside `grpc-server.cpp`. It is still run once.
+
+Build with the same `BUILD_TYPE` and `CMAKE_ARGS` as before; it takes about 4 minutes. Check: `otool -L backend/cpp/llama-cpp/grpc-server` lists `libvulkan`, `libjpeg` and `libz`, and nothing matching `metal`.
+
+### Run
+
+The upstream server exits at startup with `addon runtime unavailable or invalid protocol` unless add-ons are turned off; `make build` doesn't appear to produce the add-on runtime. Decisions don't use it.
+
+```bash
+ln -s /path/to/Kev-4B-Q4_K_M.gguf models/     # ggml-org/Kev-4B-GGUF
+
+cat > models/kev-4b.yaml <<'EOF'
+name: kev-4b
+backend: llama-cpp
+context_size: 8192
+gpu_layers: 99
+flash_attention: "true"
+known_usecases:
+  - decisions
+parameters:
+  model: Kev-4B-Q4_K_M.gguf
+EOF
+
+./local-ai run --address 127.0.0.1:8086 --models-path ./models --addons-enabled=false \
+  --external-grpc-backends "llama-cpp:$PWD/backend/cpp/llama-cpp/run-vulkan.sh"
+```
+
+Declare `known_usecases: [decisions]`. LocalAI never guesses it, and a model that declares other usecases without it gets a `400` from the decision endpoints.
+
+```bash
+curl -s http://127.0.0.1:8086/v1/systemone -H 'Content-Type: application/json' -d '{
+  "model": "kev-4b",
+  "state": "My order arrived broken and I want my money back. This is the second time.",
+  "questions": {
+    "team": {"type": "choice", "instructions": "Which team should handle this ticket?",
+             "criteria": {"billing": "Payments, invoices and refunds",
+                          "shipping": "Delivery and damaged goods",
+                          "product": "Questions about how the product works"}},
+    "refund": {"type": "noul", "instructions": "The customer explicitly asks for a refund"},
+    "urgency": {"type": "score", "instructions": "How urgent is this ticket?",
+                "criteria": ["not urgent", "somewhat urgent", "urgent", "critical"]}
+  }
+}' | python3 -m json.tool
+```
+
+Measured:
+
+| Check | Result |
+|---|---|
+| `/v1/systemone`, three questions (choice, noul, score) | shipping 0.67, refund 0.96, urgency 2.11; 128 input tokens, 0 output |
+| `/v1/decisions`, the OpenAI-style contract | Typed answers in question order |
+| First request, including model load | 10.6 s |
+| GPU placement | `n_gpu_layers=99` applied. All 33 layers on the Radeon, about 3.7 GB of 4080 MiB, and the probabilities match a direct `llama-server` run with every layer offloaded, digit for digit |
+| VRAM detection | `/api/resources` reports the Radeon Pro 5500M with 4 GB; the patch still works on v4.12 |
+
+Kev-4B's accuracy and calibration on this path are in [decision-models.md](decision-models.md#results): 0.745 on JevBench, with the best calibration measured.
+
+What doesn't work here:
+
+- **Jeva-4B.** Neither LocalAI nor llama.cpp supports it.
+- **The `vllm-cpp` backend.** On macOS it is packaged only for Apple Silicon, and its Vulkan engine keeps weights in system RAM on a discrete card. See [Runtime paths](decision-models.md#runtime-paths).
+- **The menu-bar app** has not been rebuilt on v4.12. Its launch arguments would need `--addons-enabled=false` too.
+
 ## Verify
 
 LocalAI's hardware probe reports `GPU vendor=""` and `Total available VRAM 0` on macOS and does not forward the backend's ggml banner, so its logs cannot confirm placement. Ask IOKit:
@@ -315,6 +419,8 @@ The eviction window is the whole story: the first request tears down one backend
 
 **The server exits at startup with `read-only file system`.** Storage paths were resolved relative to a working directory of `/`. Pass them explicitly, as the app bundle does.
 
+**The server exits at startup with `addon runtime unavailable or invalid protocol`.** That's v4.12's add-ons, whose runtime a plain `make build` doesn't seem to produce. Pass `--addons-enabled=false`.
+
 **Images come back as noise.** `diffusion_conv_direct:true` didn't reach the backend. Check the model YAML's `options` list.
 
 ## Upstream submissions
@@ -323,7 +429,7 @@ Three changes are prepared for [mudler/LocalAI](https://github.com/mudler/LocalA
 
 | Change | Branch | In this build |
 |---|---|---|
-| Detect non-Apple GPUs on macOS via `system_profiler`, so a discrete AMD card reports its VRAM instead of 0 | `macbook-pro-2019-radeon-5500m-4gb` | Yes |
+| Detect non-Apple GPUs on macOS via `system_profiler`, so a discrete AMD card reports its VRAM instead of 0. Still needed on v4.12, where it applies without conflicts | `macbook-pro-2019-radeon-5500m-4gb` | Yes |
 | Make img2img `strength` configurable on the stable-diffusion backend, instead of hardcoding 0.75 | `feat/sd-img2img-strength` | No |
 | Honour cloud-proxy passthrough on `/v1/images/generations`, which already works for chat | `feat/images-cloud-proxy` | No |
 
@@ -337,7 +443,9 @@ Three changes are prepared for [mudler/LocalAI](https://github.com/mudler/LocalA
 | `context_size` | Model YAML | Context window. 16384 for agent use. |
 | `diffusion_conv_direct:true` | Model YAML `options` | Required for image models |
 | `keep_vae_on_cpu:true` | Model YAML `options` | Required for SDXL |
+| `known_usecases: [decisions]` | Model YAML | Serve a decision model on `/v1/systemone` and `/v1/decisions` |
 | `--external-grpc-backends` | Command line | Register the wrapper scripts |
+| `--addons-enabled=false` | Command line | Required to start v4.12 built with `make build` |
 | `--models-path` | Command line | Weights and YAML files must live inside it |
 | `LOCALAI_DISABLE_HARDWARE_DEFAULTS=true` | Environment | Stop LocalAI auto-tuning over your settings |
 
