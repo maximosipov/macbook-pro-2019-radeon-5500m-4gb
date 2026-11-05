@@ -92,7 +92,7 @@ block-beta
     m4["Granite-4.0-H-Micro · IBM"] c4_0["0.63"] c4_1["0.19"] c4_2["0.39"] c4_3["0.26"] c4_4["0.86"] c4_5["0.01"]
     m5["Granite-4.2-3B · IBM"] c5_0["0.62"] c5_1["0.19"] c5_2["0.29"] c5_3["0.22"] c5_4["0.65"] c5_5["0.00"]
     m6["LFM2.5-2.6B · Liquid AI"] c6_0["0.68"] c6_1["0.23"] c6_2["0.14"] c6_3["0.22"] c6_4["0.69"] c6_5["0.00"]
-    m7["LFM3-1.7B · Liquid AI"] c7_0["0.66‡‡"] c7_1["—"] c7_2["0.14††"] c7_3["—"] c7_4["0.85"] c7_5["—"]
+    m7["LFM3-1.7B · Liquid AI"] c7_0["0.66‡‡"] c7_1["0.15"] c7_2["0.14††"] c7_3["—"] c7_4["0.85"] c7_5["—"]
     m8["Phi-4-mini · Microsoft"] c8_0["0.67"] c8_1["0.10"] c8_2["0.39"] c8_3["0.30"] c8_4["n/a"] c8_5["0.10"]
     m9["SmolLM3-3B · Hugging Face"] c9_0["0.74"] c9_1["0.08"] c9_2["0.29"] c9_3["0.29"] c9_4["n/a"] c9_5["0.03"]
     style h0 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
@@ -129,9 +129,9 @@ block-beta
     style c4_1 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
     style c5_1 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
     style c6_1 fill:#4292c6,stroke:#ffffff,color:#ffffff
+    style c7_1 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
     style c8_1 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
     style c9_1 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
-    style c7_1 fill:#f2f2f2,stroke:#ffffff,color:#999999
     style c0_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
     style c1_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
     style c2_2 fill:#4292c6,stroke:#ffffff,color:#ffffff
@@ -245,7 +245,7 @@ The dense 4.1 and 4.2 models give up that memory advantage, and 4.2 scores at or
 
 **LFM2.5-2.6B** is built for on-device inference: the fastest decoder and smallest resident model among the previously measured set, fitting its whole 128K window without quantizing the cache. Most layers are gated short convolutions rather than attention. It scores 0.000 on MRCR.
 
-**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5; GPU residency and context ceiling have not been measured. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
+**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5; GPU residency and context ceiling have not been measured. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. IFBench scored 0.15 strict and 0.17 loose over 100 prompts. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
 
 Licence is **LFM Open License v1.0**, not Apache-2.0 — the only custom terms in the set. Liquid AI also publishes [Pipette](glossary.md#g-pipette), whose datasets this page reuses.
 
@@ -342,7 +342,7 @@ The colour-coded view of this table is in [At a glance](#ranking-across-every-be
 | Granite-4.0-H-Micro | IBM | 0.63 | 0.19 / 0.20 | 0.39 | 0.26 | 0.86 |
 | Granite-4.2-3B | IBM | 0.62 | 0.19 / 0.24 | 0.29 | 0.22 § | 0.65 |
 | LFM2.5-2.6B | Liquid AI | 0.68 | 0.23 / 0.23 | 0.14 † | 0.22 § | 0.69 |
-| LFM3-1.7B | Liquid AI | 0.66 ‡‡ | — | 0.14 †† | — | 0.85 |
+| LFM3-1.7B | Liquid AI | 0.66 ‡‡ | 0.15 / 0.17 | 0.14 †† | — | 0.85 |
 | Phi-4-mini | Microsoft | 0.67 | 0.10 / 0.13 | 0.39 | 0.30 | n/a ‡ |
 | SmolLM3-3B | Hugging Face | 0.74 | 0.08 / 0.11 | 0.29 | 0.29 | n/a ‡ |
 | *frontier reference* | — | *~0.98* ᵍ | *~0.83* ᵉ | *~0.90* ᵇ | *~0.955* ᶠ | *~0.78* ᵃ |
