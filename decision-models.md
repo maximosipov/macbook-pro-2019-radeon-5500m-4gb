@@ -22,7 +22,7 @@ An LLM answers a classification question by generating text, which code then par
 | **noul** | P(yes) | `if` |
 | **score** | A value on a declared ordered scale | threshold or sort |
 
-Because the state is prefilled once and every question runs against it, ten questions about one ticket cost roughly what one costs. And because no tokens are generated, there is nothing to parse: no malformed JSON, no prose answer where a tool call was wanted. That is the failure that rules [Phi-4-mini and SmolLM3](models.md#choosing-a-model-for-unattended-work) out of agent loops here.
+Whether a runtime shares the state across questions depends on its implementation; the [d1 repeated-state test](#prefill-and-the-cached-state) found no material wall-time saving for sequential requests on the tested CPU path. Because no tokens are generated, there is nothing to parse: no malformed JSON, no prose answer where a tool call was wanted. That is the failure that rules [Phi-4-mini and SmolLM3](models.md#choosing-a-model-for-unattended-work) out of agent loops here.
 
 TypeSafe AI introduced the category with **Jev** on 15 September 2026 ([coverage](https://simonwillison.net/2026/Sep/21/jev/)). Jev is closed and API-only. Open models with the same interface appeared within weeks, and that is what this page evaluates.
 
