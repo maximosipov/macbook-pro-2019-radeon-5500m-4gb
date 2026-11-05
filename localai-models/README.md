@@ -1,14 +1,17 @@
 # LocalAI model configs
 
-LocalAI model YAML files for every model analysed in [models.md](../models.md), each set to the largest context measured to fit this card — read [the caveat on allocation ceilings](#maximum-context-measured) before trusting a wide one. Server setup: [localai.md](../localai.md).
+LocalAI model YAML files for every model analysed in [models.md](../models.md), with context settings described below — read [the caveat on allocation ceilings](#maximum-context-measured) before trusting a wide one. Server setup: [localai.md](../localai.md).
 
 | File | Model | Context | Notes |
 |---|---|---|---|
-| `gemma-4-e2b.yaml` | Gemma-4-E2B | 128K | Fastest prefill, most capability per gigabyte. Good default. |
+| `gemma-4-e2b.yaml` | Gemma-4-E2B | 128K | Fast prefill, strong capability per gigabyte. Good default. |
 | `gemma-4-e4b.yaml` | Gemma-4-E4B | 64K | Best broad knowledge and the only 1.000 on MRCR. Slowest. Verified under load. |
 | `granite-4.0-h-micro.yaml` | Granite-4.0-H-Micro | 128K | Best tool calling. The pick for agents and unattended work. |
 | `granite-4.2-3b.yaml` | Granite-4.2-3B | 64K | Dense sibling of the 4.0 hybrid. Scores lower on everything here. |
-| `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest and smallest. Scores 0.000 on MRCR. |
+| `lfm3-1.7b.yaml` | LFM3-1.7B | 8K | Text model; conservative initial context, not a measured ceiling. |
+| `d1-2b.yaml` | d1-2B | 8K | Decision model; tested for text questions. Single-pass requests must fit the physical batch. |
+| `d1-vision-cpu.yaml` | d1-2B + F16 projector | 2K | CPU image-decision profile; one chart fixture tested. Batch 1024, so larger images can exceed the limit. Do not send video via LocalAI. |
+| `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest decoder; small footprint. Scores 0.000 on MRCR. |
 | `phi-4-mini.yaml` | Phi-4-mini | 56K | Only model above zero on LongBench. **No tool calls.** |
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |
 | `qwen3.5-4b.yaml` | Qwen3.5-4B | 96K | Best maths and reasoning. A thinking model. |
@@ -38,6 +41,9 @@ Weights are referenced by filename and must live inside the models folder: Local
 | `gemma-4-E4B-it-Q4_K_M.gguf` | [bartowski/google_gemma-4-E4B-it-GGUF](https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF) |
 | `granite-4.0-h-micro-Q4_K_M.gguf` | [ibm-granite/granite-4.0-h-micro-GGUF](https://huggingface.co/ibm-granite/granite-4.0-h-micro-GGUF) |
 | `granite-4.2-3b-Q4_K_M.gguf` | [ibm-granite/granite-4.2-3b-GGUF](https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF) |
+| `LFM3-1.7B-Q4_K_M.gguf` | [LiquidAI/LFM3-1.7B-GGUF](https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF) |
+| `d1-2B-Q4_K_M.gguf` | [LiquidAI/d1-2B-GGUF](https://huggingface.co/LiquidAI/d1-2B-GGUF) |
+| `mmproj-d1-2B-F16.gguf` | [LiquidAI/d1-2B-GGUF](https://huggingface.co/LiquidAI/d1-2B-GGUF) (CPU image profile) |
 | `LFM2.5-2.6B-Q4_K_M.gguf` | [LiquidAI/LFM2.5-2.6B-GGUF](https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF) |
 | `Phi-4-mini-instruct-Q4_K_M.gguf` | [bartowski/microsoft_Phi-4-mini-instruct-GGUF](https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF) |
 | `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | [Qwen/Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507-GGUF) |
@@ -54,7 +60,7 @@ ln -s /path/to/weights.gguf ~/Library/Application\ Support/LocalAI/models/
 
 ## Maximum context, measured
 
-Every `context_size` here is the largest window the model holds without spilling its KV cache to host RAM, found by loading each model at descending context sizes and comparing generation throughput against its own rate at 4K. A spill is unmistakable — throughput collapses by a factor of 30 or more — so the ceiling is sharp rather than a judgement call.
+Except for the LFM3 and d1 starting profiles, each `context_size` here is the largest window the model holds without spilling its KV cache to host RAM, found by loading each model at descending context sizes and comparing generation throughput against its own rate at 4K. A spill is unmistakable — throughput collapses by a factor of 30 or more — so the ceiling is sharp rather than a judgement call.
 
 | Model | Context | tok/s there | tok/s at 4K | First size that spilled |
 |---|---|---|---|---|
@@ -65,10 +71,11 @@ Every `context_size` here is the largest window the model holds without spilling
 | Granite-4.0-H-Micro | 131072 | 39.2 | 41.4 | — (trained ceiling) |
 | Granite-4.2-3B | 65536 | 41.3 | 40.9 | 81920 → 0.8 |
 | LFM2.5-2.6B | 131072 | 56.4 | 53.3 | — (trained ceiling) |
+| LFM3-1.7B | 262144 allocated, profile remains 8192 | 66.0 | 64.3 | — (trained ceiling; q4_0 KV) |
 | Phi-4-mini | 57344 | 38.5 | 39.1 | 65536 → 1.3 |
 | SmolLM3-3B | 65536 | 46.4 | 46.3 | — (trained ceiling) |
 
-Four models reach their full trained window and stop there because the model runs out of context, not because the card runs out of VRAM. The rest are VRAM-bound, and the binding constraint is weight size plus cache geometry rather than parameter count: Qwen3-4B-2507 is the strongest tool caller here but has the heaviest cache, so it gets the narrowest window of any model in the set.
+Six models, including LFM3, reach their full trained window in this short-prompt sweep and stop there because the model runs out of context, not because the card runs out of VRAM. The rest are VRAM-bound, and the binding constraint is weight size plus cache geometry rather than parameter count: Qwen3-4B-2507 is the strongest tool caller here but has the heaviest cache, so it gets the narrowest window of any model in the set.
 
 **These are allocation ceilings, and an allocation ceiling is not a usable context.** The sweep above loads each model and generates from a one-token prompt, which proves the KV cache fits and nothing more. Fill that window with real tokens and a model can degrade badly while still "fitting".
 
@@ -80,7 +87,7 @@ Gemma-4-E4B is the worked example. It passes the sweep at 131072, but with a 9,6
 | 131072 | — | 4.5 tok/s | 5× slower, empty content |
 | 131072, ~43K-token prompt | — | — | backend crashed after 105 min |
 
-So its config is set to **64K**, the largest context verified under a real prompt, not the 128K the sweep reports. **The other eight models have not had this second test.** Their configs use sweep figures, so treat any of them as provisional until exercised with a full prompt — the wider the window, the more likely it overstates.
+So its config is set to **64K**, the largest context verified under a real prompt, not the 128K the sweep reports. **The other original eight models have not had this second test.** Their configs use sweep figures, so treat any of them as provisional until exercised with a full prompt — the wider the window, the more likely it overstates. LFM3 retains a conservative 8K setting rather than its 256K allocation result.
 
 Two further cautions:
 
@@ -89,17 +96,17 @@ Two further cautions:
 
 ## The settings, and why
 
-Every text config carries the same five settings:
+The original chat profiles use the following settings. The LFM3 and decision profiles use conservative starting contexts and only the settings shown in their YAML; the CPU image profile explicitly disables GPU offload:
 
 | Setting | Why |
 |---|---|
 | `gpu_layers: 99` | Put every layer on the Radeon. Anything less splits the model and pays a PCIe hop per token. |
 | `flash_attention: "true"` | It runs on the GPU on these branches and is the faster option, and a quantized KV cache is impossible without it. |
 | `cache_type_k`/`cache_type_v: q4_0` | About 4% slower than f16, and 3.5× more context. Avoid q8_0 unless your backend includes the q8_0 flash-attention guard. |
-| `context_size` | The measured ceiling above. |
+| `context_size` | See the measured ceilings and starting-profile exceptions above. |
 | `f16: true` | Standard for GGUF weights here. |
 
-The image configs set `diffusion_conv_direct:true`, required for correctness rather than speed: without it every image is [colourful noise](../README.md#ki-diffusion-noise). SDXL also needs `keep_vae_on_cpu:true`, since VRAM peaks during VAE decoding.
+The image-generation configs set `diffusion_conv_direct:true`, required for correctness rather than speed: without it every image is [colourful noise](../README.md#ki-diffusion-noise). SDXL also needs `keep_vae_on_cpu:true`, since VRAM peaks during VAE decoding.
 
 ## Verified
 
@@ -117,9 +124,9 @@ Two different levels of testing sit behind these files.
 | `sd-1.5` | Recognisable apple, not noise | — | 80.7 s at 20 steps, first call |
 | `sdxl-turbo` | Recognisable apple, not noise | — | 221.9 s, first call |
 
-That run predates the context changes above, so its throughput figures were taken at the older, narrower settings.
+That run predates the context changes above, so its throughput figures were taken at the older, narrower settings. LFM3 also answered 20 + 34 correctly through LocalAI with a larger output budget; VRAM and sustained throughput were not measured for that request.
 
-**Decisions, run through LocalAI v4.12 end to end** on 4 November 2026: `kev-4b` answered a three-question `/v1/systemone` request (choice, noul, score) and a `/v1/decisions` request, with every layer on the Radeon and probabilities identical to a direct `llama-server` run. Its JevBench accuracy and calibration are in [decision-models.md](../decision-models.md#results). It uses only two of the five text settings below, `gpu_layers` and `flash_attention`: no KV quantization was tested, and its context is the one it was run at, not a swept ceiling.
+**Decisions, run through LocalAI v4.12 end to end:** d1-2B answered a short three-question text request, and the CPU image profile answered one chart question correctly. The model-card video request is not reliable on this LocalAI build; see [the media limitation](../localai.md#lfm3-and-d1-2b). On 4 November 2026, `kev-4b` answered a three-question `/v1/systemone` request (choice, noul, score) and a `/v1/decisions` request, with every layer on the Radeon and probabilities identical to a direct `llama-server` run. Its JevBench accuracy and calibration are in [decision-models.md](../decision-models.md#results). It uses only two of the five text settings below, `gpu_layers` and `flash_attention`: no KV quantization was tested, and its context is the one it was run at, not a swept ceiling.
 
 **Context fit measured with `llama-cli`, not yet run through LocalAI**: `gemma-4-e2b`, `gemma-4-e4b`, `granite-4.2-3b`, `phi-4-mini`, `smollm3-3b`. The backend and flags are identical to the four verified configs, so these are expected to work, but nothing has exercised them over the API.
 
