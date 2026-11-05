@@ -10,7 +10,7 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 | `granite-4.2-3b.yaml` | Granite-4.2-3B | 64K | Dense sibling of the 4.0 hybrid. Scores lower on everything here. |
 | `lfm3-1.7b.yaml` | LFM3-1.7B | 8K | Text model; conservative initial context, not a measured ceiling. |
 | `d1-2b.yaml` | d1-2B | 8K | Decision model; tested for text questions. Single-pass requests must fit the physical batch. |
-| `d1-vision-cpu.yaml` | d1-2B + F16 projector | 2K | CPU image-decision profile; one chart fixture tested. Batch 1024, so larger images can exceed the limit. |
+| `d1-vision-cpu.yaml` | d1-2B + F16 projector | 2K | CPU image-decision profile; one chart fixture tested. Batch 1024, so larger images can exceed the limit. Do not send video via LocalAI. |
 | `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest and smallest. Scores 0.000 on MRCR. |
 | `phi-4-mini.yaml` | Phi-4-mini | 56K | Only model above zero on LongBench. **No tool calls.** |
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |

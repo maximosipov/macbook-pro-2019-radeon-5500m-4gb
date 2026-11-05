@@ -1,5 +1,6 @@
 # d1-2B image decisions on CPU; see localai.md#lfm3-and-d1-2b.
-# Requires both official GGUFs. Tested on one chart image, not video.
+# Requires both official GGUFs. Tested on one chart image. LocalAI video is
+# unsupported: a small video in `files` was silently ignored in testing.
 # Each rendered question and image must fit the 1024-token physical batch.
 name: d1-vision-cpu
 backend: llama-cpp
