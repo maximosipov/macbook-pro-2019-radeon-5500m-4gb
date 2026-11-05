@@ -136,7 +136,7 @@ Two hardware facts carry over from the rest of this repository. There is **no bf
 | **[Calibration](glossary.md#g-ece)**: ECE and Brier | Whether "80%" means right 80% of the time | See [Results](#results). Temperature fitted on one half (split by paraphrase group), scored on the other. On 231 items this is noisy: it made Kev's ECE worse (0.038 to 0.082), which says the raw figure was already about as good as this sample can show. |
 | **Permutation flip rate** | Whether the answer changes when the options are shuffled | One shuffle per item. **Jeva-4B: no answer changed, largest probability change 1.3 × 10⁻⁶,** invariant by construction as claimed. Qwen3.5-4B: 18 of 231 answers changed (8%), largest change 0.58. Gemma-4-E2B: 32 of 231 (14%), largest 1.0. Accuracy barely moved in either case, so label-logit reading is position-biased item by item rather than overall. |
 | **Cold and cached latency** | Whether a second question about a state reuses its prefill | See [Prefill and the cached state](#prefill-and-the-cached-state). Measured at about 2.7K tokens only, not at 256 or 8K. |
-| **Null-option cases** | Declining correctly when no listed option fits | Not run. |
+| **Tool routing with an explicit none option** | Choose a named tool or decline when no tool is needed | d1-2B Q4_K_M on CPU: 24/24 existing custom prompts, including 4/4 no-tool cases, with no request errors. Each request listed available tools plus an explicit `none` choice. This checks selection only, not tool-call argument generation or a native null-option feature. Other decision models were not run on this adaptation. |
 | **Agreement with Jev** | How close a local model gets to the hosted original | Not run, and its result would stay local. |
 
 How the [benchmarking rules](benchmarking.md#the-rules-that-follow) applied:
@@ -147,7 +147,7 @@ How the [benchmarking rules](benchmarking.md#the-rules-that-follow) applied:
 
 ## What's left
 
-1. **Null-option cases**, recast from the 24-case [custom tool set](benchmarking.md#capability-benchmarks) with negatives included. Jeva is the only candidate that claims to handle "none of these".
+1. **Null-option cases for the other decision models**, recast from the 24-case [custom tool set](benchmarking.md#capability-benchmarks) with negatives included. d1 was tested with an explicit `none` option; native null-option handling remains untested.
 2. **Jeva-4B on the Radeon**, without new llama.cpp code: merge its LoRA, convert the backbone to GGUF, serve it with `llama-server --embeddings --pooling last`, and run its head in a small `/v1/systemone` service. About a day, and it measures whether Jeva's 0.87 survives Q4. Native llama.cpp support is about 4–6 days more, and worth it only if Q4 holds up.
 3. **Kev-0.8B as a GGUF** for the native path, converted with upstream's Kev support; no GGUF is published.
 4. **Latency at 8K-token states**, on Qwen3.5-4B, Gemma-4-E2B and native Kev-4B.
