@@ -11,7 +11,7 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 | `lfm3-1.7b.yaml` | LFM3-1.7B | 8K | Text model; conservative initial context, not a measured ceiling. |
 | `d1-2b.yaml` | d1-2B | 8K | Decision model; tested for text questions. Single-pass requests must fit the physical batch. |
 | `d1-vision-cpu.yaml` | d1-2B + F16 projector | 2K | CPU image-decision profile; one chart fixture tested. Batch 1024, so larger images can exceed the limit. Do not send video via LocalAI. |
-| `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest and smallest. Scores 0.000 on MRCR. |
+| `lfm2.5-2.6b.yaml` | LFM2.5-2.6B | 128K | Fastest decoder; small footprint. Scores 0.000 on MRCR. |
 | `phi-4-mini.yaml` | Phi-4-mini | 56K | Only model above zero on LongBench. **No tool calls.** |
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |
 | `qwen3.5-4b.yaml` | Qwen3.5-4B | 96K | Best maths and reasoning. A thinking model. |
@@ -71,10 +71,11 @@ Except for the LFM3 and d1 starting profiles, each `context_size` here is the la
 | Granite-4.0-H-Micro | 131072 | 39.2 | 41.4 | — (trained ceiling) |
 | Granite-4.2-3B | 65536 | 41.3 | 40.9 | 81920 → 0.8 |
 | LFM2.5-2.6B | 131072 | 56.4 | 53.3 | — (trained ceiling) |
+| LFM3-1.7B | 262144 allocated, profile remains 8192 | 66.0 | 64.3 | — (trained ceiling; q4_0 KV) |
 | Phi-4-mini | 57344 | 38.5 | 39.1 | 65536 → 1.3 |
 | SmolLM3-3B | 65536 | 46.4 | 46.3 | — (trained ceiling) |
 
-Four models reach their full trained window and stop there because the model runs out of context, not because the card runs out of VRAM. The rest are VRAM-bound, and the binding constraint is weight size plus cache geometry rather than parameter count: Qwen3-4B-2507 is the strongest tool caller here but has the heaviest cache, so it gets the narrowest window of any model in the set.
+Five models, including LFM3, reach their full trained window in this short-prompt sweep and stop there because the model runs out of context, not because the card runs out of VRAM. The rest are VRAM-bound, and the binding constraint is weight size plus cache geometry rather than parameter count: Qwen3-4B-2507 is the strongest tool caller here but has the heaviest cache, so it gets the narrowest window of any model in the set.
 
 **These are allocation ceilings, and an allocation ceiling is not a usable context.** The sweep above loads each model and generates from a one-token prompt, which proves the KV cache fits and nothing more. Fill that window with real tokens and a model can degrade badly while still "fitting".
 

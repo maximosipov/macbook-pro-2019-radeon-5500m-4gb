@@ -27,7 +27,7 @@ Four measurements per model:
 | **Dot size** | Generation speed — smallest dot 32 tok/s, largest 58 |
 | **Dot colour** | Largest context that fits on this card — pale blue 24K through deep navy 128K |
 
-LFM3-1.7B is absent from this quadrant because MRCR and its maximum fitting context have not been measured; its available results appear in the tables and heatmap below.
+LFM3-1.7B is absent from this quadrant because MRCR has not yet been measured; its available results appear in the tables and heatmap below.
 
 Labels repeat both as `(context, speed)`. Context maxima are the q4_0 figures from the [ceilings table](#context-ceilings); several are the model's trained limit rather than the card's.
 
@@ -73,7 +73,7 @@ quadrantChart
 
 Gemma-4-E4B and Qwen3.5-4B differ by 0.005 on reasoning and 2 tok/s, and by the full height of the chart on retrieval. Short-prompt capability does not predict long-context behaviour.
 
-Gemma-4-E4B is alone in the top right and is the slowest decoder in the set. Gemma-4-E2B trades some retrieval for 53 tok/s and the smallest footprint (1.65 GB). LFM2.5 is the fastest model and the weakest on both other axes.
+Gemma-4-E4B is alone in the top right and is the slowest decoder in the set. Gemma-4-E2B trades some retrieval for 53 tok/s and the smallest footprint among the plotted models (1.65 GB). LFM2.5 is the fastest model and the weakest on both other axes.
 
 Context capacity cuts across both axes: three models pass the sweep at the full 128K window, spread across three quadrants, because the ceiling follows [KV geometry](#context-ceilings) rather than model quality — though only Gemma-4-E4B has been tested under a real prompt load, and it holds 64K rather than the 128K it allocates. Qwen3-4B-2507 is the most constrained at 24K despite leading on tool calling, then Phi-4-mini at 56K — both need a q4_0 cache for even that, reaching about 10K and 14K at f16. SmolLM3-3B's 64K is its trained limit rather than the card's.
 
@@ -245,7 +245,7 @@ The dense 4.1 and 4.2 models give up that memory advantage, and 4.2 scores at or
 
 **LFM2.5-2.6B** is built for on-device inference: the fastest decoder and smallest resident model among the previously measured set, fitting its whole 128K window without quantizing the cache. Most layers are gated short convolutions rather than attention. It scores 0.000 on MRCR.
 
-**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5; GPU residency and context ceiling have not been measured. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. IFBench scored 0.15 strict and 0.17 loose over 100 prompts. GPQA Diamond scored 27/100, with 48 unparsed responses, all reaching the 3,072-token output limit; this is not a reliable capability estimate. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
+**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5. At 4K f16 context, llama.cpp reported 1,040.82 MiB of GPU model buffers and 1,227.86 MiB total model, KV and compute buffers. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. IFBench scored 0.15 strict and 0.17 loose over 100 prompts. GPQA Diamond scored 27/100, with 48 unparsed responses, all reaching the 3,072-token output limit; this is not a reliable capability estimate. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
 
 Licence is **LFM Open License v1.0**, not Apache-2.0 — the only custom terms in the set. Liquid AI also publishes [Pipette](glossary.md#g-pipette), whose datasets this page reuses.
 
@@ -279,11 +279,11 @@ All [Q4_K_M](glossary.md#g-quant), `llama-bench -ngl 99 -fa 1 -p 512 -n 128 -r 3
 | Granite-4.1-3B | IBM | dense | 78.9 ± 15.2 | 46.1 ± 0.1 | 2.24 GB, KV-bound |
 | Granite-4.2-3B | IBM | dense [GQA](glossary.md#g-arch) | 76.1 ± 12.2 | 40.2 ± 10.4 | 2.48 GB |
 | LFM2.5-2.6B | Liquid AI | [LFM2 hybrid](glossary.md#g-lfm2) (short convolution) | 122.3 ± 0.1 | **58.3 ± 0.1** | 1.84 GB |
-| LFM3-1.7B | Liquid AI | short convolution and attention hybrid | **192.0 ± 11.5** | 50.1 ± 1.7 | Not measured; GGUF file 1.10 GB |
+| LFM3-1.7B | Liquid AI | short convolution and attention hybrid | **192.0 ± 11.5** | 50.1 ± 1.7 | 1,040.82 MiB GPU model buffers; 1,227.86 MiB including 4K f16 KV and compute buffers, loader-reported |
 | Phi-4-mini | Microsoft | dense [GQA](glossary.md#g-arch) | 75.2 ± 13.1 | 42.0 ± 0.1 | 3.04 GB — tightest fit here |
 | SmolLM3-3B | Hugging Face | dense | 93.6 ± 14.6 | 51.2 ± 0.1 | 2.28 GB |
 
-Every model loads and runs correctly on the Vulkan build with no source changes.
+Every model loads on the Vulkan build with no source changes. LFM3 passed the coherence check, but its short-answer battery exhausted its token budget before final answers; see [Capability scores](#capability-scores).
 
 Read these as a floor: the GPU idles at 10 MHz, so a cold `tg128` partly measures the clock ramp. Treat gaps under about 20% as noise, especially on rows with large error bars, and prefer a [sustained serving measurement](benchmarking.md#sustained-serving-throughput) for expected throughput.
 
@@ -300,15 +300,15 @@ Architecture, not parameter count, decides how much context fits. The maximum is
 | Granite-4.0-H-Micro | IBM | [Mamba-2](glossary.md#g-ssm) hybrid (4/40) | 8 KiB | **~128K (capped)** | 128K (capped, measured) | 128K |
 | Granite-4.2-3B | IBM | dense GQA (40/40) | 80 KiB | ~27K | **64K (measured)** | 128K |
 | LFM2.5-2.6B | Liquid AI | [short convolution](glossary.md#g-lfm2) hybrid (8/30) | 16 KiB | **~128K (capped)** | 128K (capped, measured) | 128K |
-| LFM3-1.7B | Liquid AI | short convolution and attention hybrid (11/24) | — | — | — | 256K |
+| LFM3-1.7B | Liquid AI | short convolution and attention hybrid (11/24) | ~12 KiB †† | **at least 128K**; 256K spilled | **256K allocated** †† | 256K |
 | Phi-4-mini | Microsoft | dense GQA (32/32) | 128 KiB | ~14K | **56K (measured)** | 128K |
 | SmolLM3-3B | Hugging Face | dense [GQA](glossary.md#g-arch) (36/36) | 72 KiB | ~32K | 64K (capped, measured) | 64K |
 
-A dash means not measured or computed; LFM3’s 8K LocalAI profile is a starting setting, not a measured ceiling.
+**†† LFM3:** The loader-reported f16 KV growth is about 12 KiB/token between 32K and 128K in this configuration. With a short prompt and f16 KV, 128K generated at 67.0 tok/s but 256K fell to 1.1 tok/s; intermediate sizes were not swept. With q4_0 KV, 256K allocated and generated at 66.0 tok/s against 64.3 at 4K. These are allocation checks, not evidence that real 256K prompts are usable or retrievable. Its 8K LocalAI profile remains a conservative starting setting. A dash elsewhere means not measured or computed.
 
 "Capped" means the model's *trained* context runs out before the VRAM does. Context windows follow each vendor's wording, which is binary: 128K is 131,072 tokens, 256K is 262,144, 64K is 65,536. The computed maxima in the other columns are decimal approximations, so a row can read "~128K (capped)" against a 128K trained window.
 
-The hybrids hold their whole trained window: Granite-4.0-H-Micro's cache grows at 8 KiB/token and LFM2.5's at 16 KiB, so VRAM is never the limit. The dense models are VRAM-bound — Qwen3-4B-2507 reaches about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) lifts it to 24K.
+Granite-4.0-H-Micro and LFM2.5 hold their whole trained window: Granite-4.0-H-Micro's cache grows at 8 KiB/token and LFM2.5's at 16 KiB, so VRAM is never the limit. The dense models are VRAM-bound — Qwen3-4B-2507 reaches about 10K at f16, and a [quantized cache](llama.cpp.md#kv-cache-precision) lifts it to 24K.
 
 Measurement matters here because the geometry alone misleads in both directions. Arithmetic over the cache puts Qwen3.5-4B at ~128K and Granite-4.2-3B at ~95K, but both spill well below that once the compute buffer is accounted for; Phi-4-mini goes the other way, holding 56K against a computed ~49K. The spill is sharp rather than gradual — one step past the ceiling, generation drops from roughly 40 tok/s to under 1.5 — so the boundary is unambiguous, and there is no useful headroom just above it.
 
@@ -414,7 +414,7 @@ For an agent loop, batch job or scheduled task, three properties matter more tha
 
 **Granite-4.0-H-Micro** has the best tool-calling behaviour measured here — 24/24 on the custom set including negative cases, 0.86 BFCL AST, tied with Qwen3-4B-2507's 0.88 — and its fixed-size recurrent state makes context growth nearly free in VRAM. Mid-pack on speed.
 
-**LFM2.5-2.6B** is the choice when footprint and throughput dominate: fastest decoder, smallest resident, cheap context growth, proper `tool_calls`. It scores 0.000 on MRCR, so avoid it where the loop must recall a long history. **Qwen3-4B-Instruct-2507** leads tool calling and is a reasonable default for bounded context.
+**LFM2.5-2.6B** is the choice when footprint and throughput dominate: fastest decoder in this set, a small footprint, cheap context growth, and proper `tool_calls`. It scores 0.000 on MRCR, so avoid it where the loop must recall a long history. **Qwen3-4B-Instruct-2507** leads tool calling and is a reasonable default for bounded context.
 
 **Gemma-4-E2B** calls tools well (0.84 BFCL, 23/24 on the custom set), is second on instruction-following and MMLU-Pro, prefills at 148.8 pp512, and fits in 1.65 GB. LFM3 prefills faster at 192.0 pp512. **Gemma-4-E4B** trades speed for quality: best MMLU-Pro (0.54), second on GPQA (0.49), MRCR 1.000, at 3.21 GB and 32 tok/s.
 

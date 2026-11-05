@@ -217,7 +217,7 @@ All [Q4_K_M](glossary.md#g-quant), running fully on the GPU:
 | Broad knowledge, quality first | **Gemma-4-E4B** | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
 | Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, 149 pp512 prefill — in 1.65 GB. |
 | Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
-| Speed and small footprint | **LFM2.5-2.6B** | Fastest (58 tok/s) and smallest (1.84 GB). Fits its full 128K context. |
+| Speed and small footprint | **LFM2.5-2.6B** | Fastest decoder (58 tok/s), with a 1.84 GB footprint. Fits its full 128K context. |
 | LFM3 text and decisions | **LFM3-1.7B** and **d1-2B** | Q4 profiles run through LocalAI; see [LFM3](models.md#liquid-ai--lfm) and [decision models](decision-models.md). The 8K configurations are starting points. |
 | Decisions (routing, classification) | **Kev-4B** on the Radeon through LocalAI; **Kev-0.8B** on the CPU beside a GPU worker; **Jeva-4B** when accuracy matters | Typed probabilities instead of text. Kev-4B: calibrated (ECE 0.043), so thresholds work without fitting, 0.745 on JevBench, 2.3 s per decision, but it takes the card ([config](localai-models/kev-4b.yaml)). Kev-0.8B: 0.6 s, also calibrated, leaves the GPU to the worker. Jeva-4B: most accurate (0.87), CPU fp32 only, underconfident. See [decision-models.md](decision-models.md). |
 | Vision | **Qwen3-VL-4B** in ollama | 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512` |
