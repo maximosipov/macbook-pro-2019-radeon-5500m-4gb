@@ -27,7 +27,7 @@ Four measurements per model:
 | **Dot size** | Generation speed — smallest dot 32 tok/s, largest 58 |
 | **Dot colour** | Largest context that fits on this card — pale blue 24K through deep navy 128K |
 
-LFM3-1.7B is absent from this quadrant because GPQA, MRCR and its maximum fitting context have not been measured; its available results appear in the tables and heatmap below.
+LFM3-1.7B is absent from this quadrant because MRCR and its maximum fitting context have not been measured; its available results appear in the tables and heatmap below.
 
 Labels repeat both as `(context, speed)`. Context maxima are the q4_0 figures from the [ceilings table](#context-ceilings); several are the model's trained limit rather than the card's.
 
@@ -92,7 +92,7 @@ block-beta
     m4["Granite-4.0-H-Micro · IBM"] c4_0["0.63"] c4_1["0.19"] c4_2["0.39"] c4_3["0.26"] c4_4["0.86"] c4_5["0.01"]
     m5["Granite-4.2-3B · IBM"] c5_0["0.62"] c5_1["0.19"] c5_2["0.29"] c5_3["0.22"] c5_4["0.65"] c5_5["0.00"]
     m6["LFM2.5-2.6B · Liquid AI"] c6_0["0.68"] c6_1["0.23"] c6_2["0.14"] c6_3["0.22"] c6_4["0.69"] c6_5["0.00"]
-    m7["LFM3-1.7B · Liquid AI"] c7_0["0.66‡‡"] c7_1["0.15"] c7_2["0.14††"] c7_3["—"] c7_4["0.85"] c7_5["—"]
+    m7["LFM3-1.7B · Liquid AI"] c7_0["0.66‡‡"] c7_1["0.15"] c7_2["0.14††"] c7_3["0.27§"] c7_4["0.85"] c7_5["—"]
     m8["Phi-4-mini · Microsoft"] c8_0["0.67"] c8_1["0.10"] c8_2["0.39"] c8_3["0.30"] c8_4["n/a"] c8_5["0.10"]
     m9["SmolLM3-3B · Hugging Face"] c9_0["0.74"] c9_1["0.08"] c9_2["0.29"] c9_3["0.29"] c9_4["n/a"] c9_5["0.03"]
     style h0 fill:#ffffff,stroke:#ffffff,color:#333333,font-weight:bold
@@ -149,9 +149,9 @@ block-beta
     style c4_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
     style c5_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
     style c6_3 fill:#eff3ff,stroke:#ffffff,color:#1a1a1a
+    style c7_3 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
     style c8_3 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
     style c9_3 fill:#c6dbef,stroke:#ffffff,color:#1a1a1a
-    style c7_3 fill:#f2f2f2,stroke:#ffffff,color:#999999
     style c0_4 fill:#08519c,stroke:#ffffff,color:#ffffff
     style c1_4 fill:#9ecae1,stroke:#ffffff,color:#1a1a1a
     style c2_4 fill:#4292c6,stroke:#ffffff,color:#ffffff
@@ -174,7 +174,7 @@ block-beta
     style c7_5 fill:#f2f2f2,stroke:#ffffff,color:#999999
 ```
 
-*A dash means not measured; n/a marks an unsupported tool-call path. LFM3’s MATH-500 and MMLU-Pro scores have high unparsed rates; see [the caveat](#capability-scores). Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Built with Mermaid's `block-beta`, which takes a per-cell fill; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
+*A dash means not measured; n/a marks an unsupported tool-call path. LFM3’s MATH-500, MMLU-Pro and GPQA scores have high unparsed rates; see [the caveat](#capability-scores). Colour is rank **within each column**, because the benchmarks have very different ranges — IFBench tops out at 0.26 while BFCL starts at 0.65, so one 0–1 scale would leave most of the grid uniformly pale. Read colour as "who is best at this benchmark" and the printed number as the score. Built with Mermaid's `block-beta`, which takes a per-cell fill; regenerate with [`scripts/score-heatmap.py`](scripts/score-heatmap.py).*
 
 No row is uniformly strong. Qwen3.5-4B leads three columns and is last on MRCR; Gemma-4-E4B leads MRCR and MMLU-Pro and is last on MATH-500. BFCL is the flattest column (eight of ten between 0.65 and 0.88), MRCR the steepest.
 
@@ -245,7 +245,7 @@ The dense 4.1 and 4.2 models give up that memory advantage, and 4.2 scores at or
 
 **LFM2.5-2.6B** is built for on-device inference: the fastest decoder and smallest resident model among the previously measured set, fitting its whole 128K window without quantizing the cache. Most layers are gated short convolutions rather than attention. It scores 0.000 on MRCR.
 
-**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5; GPU residency and context ceiling have not been measured. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. IFBench scored 0.15 strict and 0.17 loose over 100 prompts. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
+**LFM3-1.7B**, Q4_K_M, measured 192.0 ± 11.5 pp512 and 50.1 ± 1.7 tg128 tok/s on the Radeon (three repetitions, llama.cpp `821a0ad27`, flash attention on). These are near-empty-context microbenchmarks, not sustained serving. Its 1.10 GB GGUF is smaller than LFM2.5; GPU residency and context ceiling have not been measured. In LocalAI it answered 20 + 34 correctly, but used 76 output tokens including reasoning; a 32-token cap returned empty visible content. The 8K [profile](localai-models/lfm3-1.7b.yaml) is a starting point, not a maximum. On MATH-500 it scored 66/100; 33 answers were unparsed, and 66 of the 67 parsed answers were correct. IFBench scored 0.15 strict and 0.17 loose over 100 prompts. GPQA Diamond scored 27/100, with 48 unparsed responses, all reaching the 3,072-token output limit; this is not a reliable capability estimate. On the existing 28-item MMLU-Pro sample it scored 4/28 (0.14), but 15 answers were unparsed and counted as wrong; the short answer budget and reasoning make this a poor capability estimate. On BFCL-V4 single-turn AST, the existing local structural checker scored 68/80 (0.85), with no HTTP failures; this does not test tool execution or multi-turn use. The 24-case custom tool set scored 23/24, including three of four no-call cases. These samples used the existing 4K-context protocol, Q4_K_M, temperature zero and thinking disabled via the chat template. Other capability and retrieval tests have not been completed; missing results are marked in the comparison tables. Liquid AI advises against agentic coding and complex multi-step reasoning for this size.
 
 Licence is **LFM Open License v1.0**, not Apache-2.0 — the only custom terms in the set. Liquid AI also publishes [Pipette](glossary.md#g-pipette), whose datasets this page reuses.
 
@@ -342,7 +342,7 @@ The colour-coded view of this table is in [At a glance](#ranking-across-every-be
 | Granite-4.0-H-Micro | IBM | 0.63 | 0.19 / 0.20 | 0.39 | 0.26 | 0.86 |
 | Granite-4.2-3B | IBM | 0.62 | 0.19 / 0.24 | 0.29 | 0.22 § | 0.65 |
 | LFM2.5-2.6B | Liquid AI | 0.68 | 0.23 / 0.23 | 0.14 † | 0.22 § | 0.69 |
-| LFM3-1.7B | Liquid AI | 0.66 ‡‡ | 0.15 / 0.17 | 0.14 †† | — | 0.85 |
+| LFM3-1.7B | Liquid AI | 0.66 ‡‡ | 0.15 / 0.17 | 0.14 †† | 0.27 § | 0.85 |
 | Phi-4-mini | Microsoft | 0.67 | 0.10 / 0.13 | 0.39 | 0.30 | n/a ‡ |
 | SmolLM3-3B | Hugging Face | 0.74 | 0.08 / 0.11 | 0.29 | 0.29 | n/a ‡ |
 | *frontier reference* | — | *~0.98* ᵍ | *~0.83* ᵉ | *~0.90* ᵇ | *~0.955* ᶠ | *~0.78* ᵃ |
@@ -365,11 +365,11 @@ Both Gemma rows have the lowest unparsed rates in the GPQA column — 0 and 5 of
 - **† LFM2.5's MMLU-Pro score of 0.14** is depressed by the answer-token budget. With its reasoning preamble, it often doesn't reach the required `The answer is (X)` before the cap, and scores 0 on those items. Read it as *not measured well here*; its MATH and IFBench scores are mid-pack.
 - **‡ Phi-4-mini and SmolLM3 show "n/a" for BFCL.** Both answer tool prompts *in prose* and emit no parseable `tool_calls` through llama.cpp's `--jinja` path on this build. That's a chat-template gap on this stack, likely fixable with a `--chat-template` override or a newer build, not an absence of tool-calling ability. Recorded as n/a rather than 0 so it isn't averaged in.
 - **¶ Gemma-4-E2B's MATH-500 0.29 measures one formatting convention, not arithmetic.** It emitted a parseable `\boxed{}` on only **33 of 100** items — against 98/100 for Granite-4.0-H-Micro — and was **correct on 29 of those 33 (88%)**. The other 67 score 0 under the convention that an unparseable answer is wrong. This is specific to MATH's LaTeX `\boxed{}` requirement rather than a general formatting weakness: on GPQA-Diamond, which wants `The answer is (X)`, the same model produced a graded answer on **100 of 100** items. It is a family trait — E4B formatted 17 of 100 and the QAT build 17 of 100, each right on 82-88% of what it did format. Whatever the true maths ability of these models is, this column does not measure it.
-- **§ GPQA is understated for these rows** by a high unparsed rate: the answer letter had to be recovered from the reasoning channel, and these models often emitted no graded A–D (LFM2.5 57%, Granite-4.2 60%, Qwen3-2507 40% unparsed), scoring 0 there. Their true scores are above the printed value.
+- **§ GPQA is understated for these rows** by a high unparsed rate: the answer letter had to be recovered from the reasoning channel, and these models often emitted no graded A–D (LFM3 48%, LFM2.5 57%, Granite-4.2 60%, Qwen3-2507 40% unparsed), scoring 0 there. The score depends on how the unparsed cases would have been answered; their underlying accuracy is unknown.
 
 Qwen3.5-4B leads MATH-500, with SmolLM3-3B and Qwen3-4B-2507 close behind. Instruction-following is the class-wide weakness: the best IFBench strict score here is 0.26 against a frontier of about 0.83. Tool calling splits into models that emit OpenAI `tool_calls` on this stack and two that do not. Above the 0.25 GPQA chance floor: Qwen3.5-4B (0.56), Gemma-4-E4B (0.49), Gemma-4-E2B (0.44), Qwen3-4B-2507 (0.37). Thinking is disabled for a like-for-like comparison; enabling it would raise the maths, MMLU and GPQA columns for the reasoning-capable models at a large throughput cost.
 
-**Coherence.** The models in the original battery clear the [correctness battery](benchmarking.md#text-correctness-battery)'s repetition check (ratio ≈ 0.01). Gemma-4-E4B passes the battery outright; the two E2B builds answer correctly behind a `[Start thinking]` preamble that defeats the exact-match scorer. A non-trivial score on any of these benchmarks is itself evidence the output is coherent rather than [NaN](glossary.md#g-nan) garbage.
+**Coherence.** LFM3 passed the 200-token repetition check on both CPU and GPU (four-gram ratio 0.01), but failed all four short-answer checks on both paths: their 32-token budget ended in the reasoning preamble. This is not a GPU/CPU correctness comparison of final answers; the separate longer-budget LocalAI arithmetic smoke test returned 54. The models in the original battery clear the [correctness battery](benchmarking.md#text-correctness-battery)'s repetition check (ratio ≈ 0.01). Gemma-4-E4B passes the battery outright; the two E2B builds answer correctly behind a `[Start thinking]` preamble that defeats the exact-match scorer. A non-trivial score on any of these benchmarks is itself evidence the output is coherent rather than [NaN](glossary.md#g-nan) garbage.
 
 Long-context results are in [the section below](#long-context-retrieval).
 

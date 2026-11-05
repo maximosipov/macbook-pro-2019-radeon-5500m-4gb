@@ -26,7 +26,7 @@ MODELS = [
     ("Granite-4.0-H-Micro", [0.63, 0.19, 0.39, 0.26, 0.86, 0.014]),
     ("Granite-4.2-3B",      [0.62, 0.19, 0.29, 0.22, 0.65, 0.000]),
     ("LFM2.5-2.6B",         [0.68, 0.23, 0.14, 0.22, 0.69, 0.000]),
-    ("LFM3-1.7B",           [0.66, 0.15, 0.14, None, 0.85, None]),
+    ("LFM3-1.7B",           [0.66, 0.15, 0.14, 0.27, 0.85, None]),
     ("Phi-4-mini",          [0.67, 0.10, 0.39, 0.30, None,  0.103]),
     ("SmolLM3-3B",          [0.74, 0.08, 0.29, 0.29, None,  0.034]),
 ]
@@ -46,6 +46,8 @@ def main():
                 label += "‡‡"
             if name == "LFM3-1.7B" and j == 2:
                 label += "††"
+            if name == "LFM3-1.7B" and j == 3:
+                label += "§"
             cells.append(f'c{i}_{j}["{label}"]')
         rows.append("    " + " ".join(cells))
         styles.append(f"    style m{i} fill:#ffffff,stroke:#ffffff,color:#333333")
