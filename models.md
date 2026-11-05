@@ -416,7 +416,7 @@ For an agent loop, batch job or scheduled task, three properties matter more tha
 
 **LFM2.5-2.6B** is the choice when footprint and throughput dominate: fastest decoder, smallest resident, cheap context growth, proper `tool_calls`. It scores 0.000 on MRCR, so avoid it where the loop must recall a long history. **Qwen3-4B-Instruct-2507** leads tool calling and is a reasonable default for bounded context.
 
-**Gemma-4-E2B** calls tools well (0.84 BFCL, 23/24 on the custom set), is second on instruction-following and MMLU-Pro, prefills fastest, and fits in 1.65 GB. **Gemma-4-E4B** trades speed for quality: best MMLU-Pro (0.54), second on GPQA (0.49), MRCR 1.000, at 3.21 GB and 32 tok/s.
+**Gemma-4-E2B** calls tools well (0.84 BFCL, 23/24 on the custom set), is second on instruction-following and MMLU-Pro, prefills at 148.8 pp512, and fits in 1.65 GB. LFM3 prefills faster at 192.0 pp512. **Gemma-4-E4B** trades speed for quality: best MMLU-Pro (0.54), second on GPQA (0.49), MRCR 1.000, at 3.21 GB and 32 tok/s.
 
 Both follow a requested answer format inconsistently — near-perfect on GPQA's `The answer is (X)`, under a third of the time on MATH's `\boxed{}`. Test the exact output shape your loop parses before relying on either.
 
@@ -436,7 +436,7 @@ Scope: tool calling is measured single-turn only. Multi-turn state tracking, rec
 
 [System One](glossary.md#g-system-one) decision models (Jev, Jeva-4B, Kev, SemIf) return a probability over declared options instead of generating text, so a routing or classification step can never return unparseable output. They have a [chapter of their own](decision-models.md), measured on the JevBench public split.
 
-The short version: **Jeva-4B is the most accurate** (0.87 overall, 0.75 on hard items), but it runs only on the CPU in fp32. **Kev-0.8B is the router**: 0.6 s per decision on the CPU and well calibrated, leaving the GPU to the worker model. On the Radeon itself, Qwen3.5-4B read through option logprobs is the best option (0.79). Further questions about a state already in the cache take 1–7 s, against 22–59 s for a new one.
+The short version: **Jeva-4B is the most accurate** (0.87 overall, 0.75 on hard items), but it runs only on the CPU in fp32. **Kev-0.8B is the router**: 0.6 s per decision on the CPU and well calibrated, leaving the GPU to the worker model. d1-2B scores 0.797 using five GPU layers and the rest on CPU; among complete fully GPU-offloaded runs, Qwen3.5-4B read through option logprobs scores 0.79. Further questions about a state already in the cache take 1–7 s, against 22–59 s for a new one.
 
 ## Image models
 

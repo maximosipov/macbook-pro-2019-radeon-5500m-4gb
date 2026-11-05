@@ -215,7 +215,7 @@ All [Q4_K_M](glossary.md#g-quant), running fully on the GPU:
 | General chat and tool calling | **Qwen3-4B-Instruct-2507** | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 24K with q4_0. |
 | Maths and reasoning | **Qwen3.5-4B** | Best on MATH-500 (0.81) and GPQA Diamond (0.56). 34 tok/s. |
 | Broad knowledge, quality first | **Gemma-4-E4B** | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
-| Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, fastest prefill (149 pp512) — in 1.65 GB. |
+| Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, 149 pp512 prefill — in 1.65 GB. |
 | Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
 | Speed and small footprint | **LFM2.5-2.6B** | Fastest (58 tok/s) and smallest (1.84 GB). Fits its full 128K context. |
 | LFM3 text and decisions | **LFM3-1.7B** and **d1-2B** | Q4 profiles run through LocalAI; see [LFM3](models.md#liquid-ai--lfm) and [decision models](decision-models.md). The 8K configurations are starting points. |

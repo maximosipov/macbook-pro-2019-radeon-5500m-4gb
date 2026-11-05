@@ -4,7 +4,7 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 
 | File | Model | Context | Notes |
 |---|---|---|---|
-| `gemma-4-e2b.yaml` | Gemma-4-E2B | 128K | Fastest prefill, most capability per gigabyte. Good default. |
+| `gemma-4-e2b.yaml` | Gemma-4-E2B | 128K | Fast prefill, strong capability per gigabyte. Good default. |
 | `gemma-4-e4b.yaml` | Gemma-4-E4B | 64K | Best broad knowledge and the only 1.000 on MRCR. Slowest. Verified under load. |
 | `granite-4.0-h-micro.yaml` | Granite-4.0-H-Micro | 128K | Best tool calling. The pick for agents and unattended work. |
 | `granite-4.2-3b.yaml` | Granite-4.2-3B | 64K | Dense sibling of the 4.0 hybrid. Scores lower on everything here. |
