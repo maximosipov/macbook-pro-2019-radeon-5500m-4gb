@@ -6,15 +6,15 @@ A local coding agent on the Radeon: OpenCode driving Gemma-4-E2B through the Loc
 |---|---|
 | **Role in the stack** | Coding-agent client of [LocalAI](localai.md) |
 | **Model** | Gemma-4-E2B Q4_K_M, 64K context, f16 KV cache, thinking off, served from [`localai-models/gemma-4-e2b-coding.yaml`](localai-models/gemma-4-e2b-coding.yaml). Chosen in [Coding agents](models.md#coding-agents) |
-| **Versions measured here** | OpenCode CLI 1.19.5 · LocalAI `v4.12.0-552-g98a562d33` in `LocalAI M.app`, llama-cpp backend on llama.cpp `785322d17` plus the fixes · MoltenVK 1.4.2 · macOS 26.7.2 · 2026-11-10 |
+| **Versions measured here** | OpenCode CLI 1.19.5 · LocalAI `v4.12.0-552-g98a562d33` in `LocalAI M.app`, llama-cpp backend on llama.cpp `4c4ca5b18` plus the fixes (`785322d17` for the end-to-end task results) · MoltenVK 1.4.2 · macOS 26.7.2 · 2026-11-10 |
 | **Config** | `~/.config/opencode/opencode.json`, user level, [below](#the-config) |
 
 ## Result
 
 - **Gemma-4-E2B works as an OpenCode agent through LocalAI.** It passed 15 of 16 end-to-end tasks, using OpenCode's own Read, Edit, Write and Bash tools. It fixed a one-line bug 9 of 9 times. 6 of 7 times it ran a failing test, fixed the code without touching the test, and reran the test to `ok`. Granite-4.0-H-Micro, the other finalist, passed 2 of 6.
-- **Generation meets the bar: 36–38 tok/s** with OpenCode's 11.5K-token prompt in context.
-- **The first turn of a session takes about 2.5 minutes.** LocalAI's llama.cpp backend prefills OpenCode's prompt at about 75 tok/s, against about 225–247 for a current `llama-server` on the same card. [Why](#why-the-first-turn-is-slow).
-- **Later turns reuse that prefill and take seconds, but not always.** Five of eight measured tasks paid a second full prefill partway through, another 2.5 minutes. The cause is not established. llama.cpp's full-size sliding-window cache (`swa_full`) did not change it and costs 0.86 GB of VRAM, so the config does not set it. [Details](#verified).
+- **Generation meets the bar: 34–39 tok/s** with OpenCode's 11.5K-token prompt in context, on a cool machine. Sustained back-to-back work heats the laptop until the CPU is held at 36–48% of its speed, and then generation drops to 24–27 tok/s and prefill to 165–175 tok/s. [Heat](#heat).
+- **The first turn of a session takes about a minute.** LocalAI's llama.cpp backend prefills OpenCode's 11.5K-token prompt at 226–229 tok/s, the same as a standalone `llama-server`. Until the backend was rebuilt on llama.cpp `4c4ca5b18` it prefilled at about 75 tok/s, and the first turn took about 2.5 minutes. [The backend pin](#the-backend-pin).
+- **Later turns reuse that prefill and take seconds, but not always.** Most measured tasks paid a second full prefill partway through: 5 of 8 on the old backend, 4 of 4 on the new one. On the new backend a miss costs about 55 s instead of 2.5 minutes. The cause is not established. llama.cpp's full-size sliding-window cache (`swa_full`) did not change it and costs 0.86 GB of VRAM, so the config does not set it. [Details](#verified).
 - **One setting decides whether warm turns stay warm:** `agent.title.disable`. With one slot, OpenCode's title request would evict the agent's cached prompt. [The config](#the-config).
 
 ## The config
@@ -61,7 +61,7 @@ On the model side, [the YAML](localai-models/gemma-4-e2b-coding.yaml) explains e
 
 ## Verified
 
-All on 2026-11-10, LocalAI resident on `127.0.0.1:8085`. Each `opencode run` used a fresh temporary project. [`scripts/opencode-e2e.py`](scripts/opencode-e2e.py) drove the runs.
+All on 2026-11-10, LocalAI resident on `127.0.0.1:8085`. Each `opencode run` used a fresh temporary project. [`scripts/opencode-e2e.py`](scripts/opencode-e2e.py) drove the runs. The task results below were measured on the old backend (`785322d17`); the [new backend](#the-backend-pin) changes speed, not the model's output.
 
 | Task | Gemma-4-E2B, head-to-head | Gemma-4-E2B, later runs | Granite-4.0-H-Micro |
 |---|---|---|---|
@@ -72,42 +72,55 @@ Granite's runs are faster because it stops early. The later runs are two smoke t
 
 Turn latency, Gemma-4-E2B through LocalAI:
 
-| Turn | Wall clock |
-|---|---|
-| First turn, model unloaded: load plus prefill of OpenCode's ~11.5K-token prompt | **169 s** |
-| Warm turn, one-word answer | **3.2 s** |
-| Warm turn, three-sentence answer | **5.6 s** |
-| Prefill, measured in the backend | 74.5 tok/s for an 11,523-token prompt |
-| Generation, measured in the backend at 11.5K context | 36.5–38.5 tok/s |
-
-Where a task's time goes. Prompt tokens processed per model call, from the backend log, one Task A that reused the cache and one that did not:
-
-| Task | Model calls | Prompt tokens processed per call | Wall clock |
-|---|---|---|---|
-| A, cache reused | 3 | 11,528 · 170 · 15 | 172 s |
-| A, one miss | 6 | 11,529 · **11,833** · 1 · 311 · 264 · 132 | 364 s |
-
-A miss reprocesses the whole conversation, about 2.5 minutes. Across eight tasks, four with `swa_full:true` and four without, five had one such miss: 6 full prefills with `swa_full` against 7 without, so it made no measurable difference. VRAM was 3.04 GB with it and 2.18 GB without. In the head-to-head, Granite-4.0-H-Micro never missed, and nor did one Gemma task against a standalone `llama-server`. Gemma's interleaved sliding-window attention can roll back only to saved checkpoints, which makes it the likely suspect, but `swa_full` should have removed that limit and did not. The cause is open.
-
-## Why the first turn is slow
-
-The same GGUF on the same card prefills three times faster in a standalone `llama-server` built from the [llama.cpp fork](llama.cpp.md)'s branch tip. The same Task A:
-
-| Server | Prefill | Task A, one run |
+| Turn | Old backend (`785322d17`) | New backend (`4c4ca5b18`) |
 |---|---|---|
-| LocalAI, llama-cpp backend (pinned llama.cpp `785322d17` plus the fixes) | 74.5 tok/s | 170 s with no cache misses |
-| `llama-server`, fork branch tip `821a0ad27`, same flags | 225 tok/s | **56 s** |
+| First turn, model unloaded: load plus prefill of OpenCode's ~11.5K-token prompt | **169 s** | about 60 s |
+| Warm turn, one-word answer | **3.2 s** | not remeasured |
+| Warm turn, three-sentence answer | **5.6 s** | not remeasured |
+| Prefill, measured in the backend, ~11.5K-token prompt | 74.5 tok/s | **226–229 tok/s** cool, 165–208 hot |
+| Generation, measured in the backend at 11.5K context | 36.5–38.5 tok/s | **34–39 tok/s** cool, 24–27 hot |
 
-It is not a LocalAI setting. Every default where the backend differs from `llama-server` was tried on the standalone server, and none slowed it ([localai.md](localai.md#performance)). The difference is the older llama.cpp that LocalAI's backend is pinned to. Generation speed is the same on both.
+The new first-turn figure is the measured prefill time (50 s) plus the model load; the warm-turn rows depend on generation and the small prefill of each new message, which did not change.
 
-Until the backend is rebuilt on a newer pin:
+Where a task's time goes. Prompt tokens processed per model call, from the backend log. [`scripts/opencode-cachetest.py`](scripts/opencode-cachetest.py) produced the rows:
 
-- **Keep a session alive.** The cost is per session, not per turn. The terminal UI (`opencode`) keeps one session across prompts; each `opencode run` starts a new one.
-- **For speed, run `llama-server` directly** and point a second provider at it (`baseURL` `http://127.0.0.1:8099/v1`). That gives up LocalAI's model management and the single endpoint for images and decisions, so it is not the default here. Stop LocalAI's copy of the model first (`curl -XPOST 127.0.0.1:8085/backend/shutdown -d '{"model":"gemma-4-e2b-coding"}'`): two copies do not fit in 4 GB.
+| Backend | Task | Model calls | Prompt tokens processed per call | Wall clock |
+|---|---|---|---|---|
+| Old | A, cache reused | 3 | 11,528 · 170 · 15 | 172 s |
+| Old | A, one miss | 6 | 11,529 · **11,833** · 1 · 311 · 264 · 132 | 364 s |
+| New | A, one miss | 3 | 11,527 · **11,894** · 15 | 145 s |
+| New | A, one miss | 3 | 11,527 · 170 · **11,764** | 147 s |
+| New | B, one miss, passed | 15 | 11,562 · 93 · 79 · 190 · **12,229** · 238 · … · 840 | 243 s |
+| New | B, one miss, failed | 6 | 11,561 · **11,825** · 79 · 189 · 595 · 171 | 168 s |
+
+A miss reprocesses the whole conversation: about 2.5 minutes on the old backend, about 55 s on the new one. On the new backend all four tasks had exactly one miss. On the old one, across eight tasks, four with `swa_full:true` and four without, five had one such miss: 6 full prefills with `swa_full` against 7 without, so it made no measurable difference. VRAM was 3.04 GB with it and 2.18 GB without. In the head-to-head, Granite-4.0-H-Micro never missed, and nor did one Gemma task against a standalone `llama-server`. Gemma's interleaved sliding-window attention can roll back only to saved checkpoints, which makes it the likely suspect, but `swa_full` should have removed that limit and did not. The cause is open.
+
+## The backend pin
+
+LocalAI's llama-cpp backend used to be built on llama.cpp `785322d17` plus the fixes. It prefilled three times slower than a standalone `llama-server` from the [llama.cpp fork](llama.cpp.md)'s branch tip, whose upstream base is `4c4ca5b18`, three days and 72 commits later. Every default where the backend differs from `llama-server` was tried on the standalone server first, and none slowed it ([localai.md](localai.md#performance)).
+
+Rebuilding the backend on `4c4ca5b18` with the same ten fixes closed the gap. `grpc-server.cpp` compiled against it unchanged. Same ~11.5K-token prompt, same card, each run started cool:
+
+| Server | Prefill | Generation |
+|---|---|---|
+| LocalAI, backend on `785322d17` plus the fixes (before) | 74.5 tok/s | 36.5–38.5 tok/s |
+| LocalAI, backend on `4c4ca5b18` plus the fixes (now) | **226–229 tok/s** | 34–39 tok/s |
+| `llama-server`, fork branch tip `821a0ad27`, OpenMP | 224–229 tok/s | 36–39 tok/s |
+| `llama-server`, the new backend's tree, no OpenMP | 217–229 tok/s | 34–39 tok/s |
+
+The documented 247 tok/s was at a 10K-token prompt; prefill slows as the context grows, and at 9K the new backend measured 258. The build is in [localai.md](localai.md#the-llamacpp-backend). Which of the 72 upstream commits made the difference was not bisected.
+
+The cost of a first turn is per session, not per turn. The terminal UI (`opencode`) keeps one session across prompts; each `opencode run` starts a new one, and OpenCode puts the project directory early in its system prompt, so a new project reuses only the first ~1,900 cached tokens.
+
+## Heat
+
+The numbers above start from a cool machine. Back-to-back prefills heat the laptop within one or two requests: `pmset -g therm` then shows `CPU_Speed_Limit` at 36–48, and the GPU slows with it. Hot, prefill measured 164–208 tok/s and generation 16–27 tok/s. The machine recovers to full speed within a few minutes of idle. Measure with `pmset -g therm` beside the numbers, and compare runs only at a similar thermal level (`sysctl machdep.xcpm.cpu_thermal_level`).
 
 ## Troubleshooting
 
-**Every turn takes minutes.** The cached prompt is being thrown away. Check `agent.title.disable`. Check that nothing else is using another LocalAI model, because loading one evicts Gemma. Even with both right, expect about half of all tasks to pay one extra full prefill ([Verified](#verified)).
+**Every turn takes a minute.** The cached prompt is being thrown away. Check `agent.title.disable`. Check that nothing else is using another LocalAI model, because loading one evicts Gemma. Even with both right, expect most tasks to pay one extra full prefill ([Verified](#verified)). If every first turn takes 2.5 minutes, the backend is still on the old pin ([The backend pin](#the-backend-pin)).
+
+**Generation drops below 30 tok/s during long sessions.** The laptop is hot ([Heat](#heat)). Check `pmset -g therm`.
 
 **A scripted `opencode run` edits files in the wrong directory.** OpenCode 1.19.5 takes its project from `$PWD`, not from the process's working directory. A script that sets only `cwd` runs the agent in whatever directory launched the script, and the agent treats that directory as writable. Pass `--dir <dir>` and set `PWD=<dir>` as well, as [`opencode-e2e.py`](scripts/opencode-e2e.py) does. That script also checks each session's directory in `~/.local/share/opencode/opencode.db` and aborts on a mismatch. Never launch an agent from `/tmp` or `$HOME`.
 

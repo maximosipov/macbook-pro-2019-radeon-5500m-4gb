@@ -9,7 +9,7 @@ One OpenAI-compatible endpoint for text and images, packaged as a menu-bar app. 
 | **Fork and branch** | [`maximosipov/LocalAI`, `macbook-pro-2019-radeon-5500m-4gb`](https://github.com/maximosipov/LocalAI/tree/macbook-pro-2019-radeon-5500m-4gb) |
 | **Upstream** | [mudler/LocalAI](https://github.com/mudler/LocalAI) |
 | **Source changes** | 2 commits: VRAM detection, and the menu-bar app with its packaging script. Plus build composition and wrapper scripts. |
-| **Pinned llama.cpp** | `785322d17` (see `backend/cpp/llama-cpp/Makefile`) |
+| **Pinned llama.cpp** | `4c4ca5b18` (see `backend/cpp/llama-cpp/Makefile`). Until 2026-11-10 it was `785322d17`, which prefilled three times slower ([Performance](#performance)) |
 | **Verified with** | LocalAI `98a562d33` (v4.12.0 plus the VRAM patch), gRPC 1.83.0, protobuf 35.1, abseil 20260107.1, Go 1.26.5, Node 24.11, CMake 3.27.0, MoltenVK 1.4.2, macOS 26.6.2: chat, decisions and images, through the rebuilt menu-bar app. The measurements in [Performance](#performance) date from LocalAI `ecdb321` on macOS 14.8.2 |
 | **Decision models** | Kev-4B over `/v1/systemone` on the Radeon; see [Decision models](#decision-models) |
 | **Runbook on the branch** | [RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md](https://github.com/maximosipov/LocalAI/blob/macbook-pro-2019-radeon-5500m-4gb/RUNBOOK-macbook-pro-2019-radeon-5500m-4gb.md) |
@@ -64,12 +64,14 @@ cd backend/cpp/llama-cpp/llama.cpp
 git fetch https://github.com/ggml-org/llama.cpp.git "$PIN"
 git checkout -b build "$PIN"
 git cherry-pick 596f1b8d1 ac2993987 5cff7ef12 89076c4e5 e671e754d \
-                7723fc8be 22d8de9f4 d190dfead 2fde960d2 0653a3821
+                7723fc8be 22d8de9f4 d190dfead 2fde960d2 0653a3821   # = the fork's 821a0ad27, minus docs
 git submodule update --init --recursive --depth 1
 cd ../../../..
 
 # Graft LocalAI's grpc-server into llama.cpp/tools/. Run once: it is not idempotent.
-( cd backend/cpp/llama-cpp && mkdir -p llama.cpp/tools/grpc-server && bash prepare.sh )
+# The touch stops `make grpc-server` from running prepare.sh a second time.
+( cd backend/cpp/llama-cpp && mkdir -p llama.cpp/tools/grpc-server && bash prepare.sh \
+  && touch llama.cpp/tools/grpc-server )
 ```
 
 `CMAKE_ARGS` must be passed through the environment, not the make command line: the Makefile does `CMAKE_ARGS?=` then `CMAKE_ARGS+=…`, and a command-line variable overrides those appends and drops `-DGGML_VULKAN=1`.
@@ -77,7 +79,7 @@ cd ../../../..
 ```bash
 P="$(brew --prefix)"
 export BUILD_TYPE=vulkan
-export CMAKE_ARGS="-DGGML_METAL=OFF \
+export CMAKE_ARGS="-DGGML_METAL=OFF -DGGML_OPENMP=OFF \
   -DVulkan_INCLUDE_DIR=$P/opt/vulkan-headers/include \
   -DVulkan_LIBRARY=$P/opt/vulkan-loader/lib/libvulkan.dylib \
   -DVulkan_GLSLC_EXECUTABLE=$P/opt/shaderc/bin/glslc \
@@ -89,6 +91,10 @@ make -C backend/cpp/llama-cpp grpc-server
 ```
 
 `-DGGML_METAL=OFF` is required because `BUILD_TYPE=vulkan` and the Darwin branch are arms of one if/else chain: choosing vulkan on macOS skips the Darwin arm that would have set `GGML_METAL=OFF`.
+
+`-DGGML_OPENMP=OFF` is needed with Apple clang 21 (the Command Line Tools, without Xcode) and Homebrew's `libomp` 16.0.6. That clang emits `__kmpc_dispatch_deinit`, which libomp 16 does not export, and the link fails with an undefined symbol from `libggml-base.a`. ggml's own thread pool takes over, and nothing measurable is lost because the model runs on the GPU.
+
+If `prepare.sh` runs twice, `patch` takes LocalAI's patch as already applied and reverses it, and the build fails on `score_enabled` and `SERVER_TASK_TYPE_SCORE`. `make grpc-server` re-runs `prepare.sh` whenever `llama.cpp/` is newer than `llama.cpp/tools/grpc-server/`, which is what the `touch` above prevents. To recover, run `patch -d llama.cpp -p1 --forward < patches/0001-add-server-task-type-score.patch` in `backend/cpp/llama-cpp`, then copy `server-context.cpp` and `server-task.h` from `llama.cpp/tools/server/` to `llama.cpp/tools/grpc-server/` again.
 
 Check the result: `otool -L backend/cpp/llama-cpp/grpc-server | grep -i metal` must print nothing.
 
@@ -252,7 +258,7 @@ LocalAI serves [decision models](decision-models.md) through `/v1/systemone`, th
 
 > **Tested 4 November 2026** on the fork branch at `98a562d33`, upstream LocalAI `v4.12.0-548` plus the VRAM patch.
 
-A server and backend built as in [Build](#build) are all it needs: the branch is on v4.12, and its pinned llama.cpp `785322d17` includes native decisions. `prepare.sh` stages the decision bridge (`decision_compat.h`, `decision_images.h`) beside `grpc-server.cpp`, and the bridge is why the backend now needs zlib and libjpeg. A backend built from an older pin answers decision requests with `501`.
+A server and backend built as in [Build](#build) are all it needs: the branch is on v4.12, and its pinned llama.cpp `4c4ca5b18` includes native decisions. `prepare.sh` stages the decision bridge (`decision_compat.h`, `decision_images.h`) beside `grpc-server.cpp`, and the bridge is why the backend now needs zlib and libjpeg. A backend built from an older pin answers decision requests with `501`.
 
 ### Run
 
@@ -351,14 +357,17 @@ Granite-4.0-H-Micro, served from the same stack at context 8192:
 
 The most reliable model measured here is also among the fastest served.
 
-**Prefill is three times slower than a current llama.cpp.** Gemma-4-E2B, 10,008-token prompt, same GGUF, same VRAM (2.17 GB):
+**Prefill: the backend's llama.cpp pin decides it.** Gemma-4-E2B, same GGUF, same VRAM (2.17 GB), same MoltenVK 1.4.2:
 
 | Server | Prefill | Generation at 11.5K context |
 |---|---|---|
-| LocalAI's backend, llama.cpp `785322d17` plus the fixes | **79 tok/s** | 36–38 tok/s |
-| `llama-server` from the [llama.cpp fork](llama.cpp.md)'s branch tip (`821a0ad27`) | **247 tok/s** | 36–38 tok/s |
+| LocalAI's backend, llama.cpp `785322d17` plus the fixes (before 2026-11-10) | **79 tok/s** at 10K tokens, 74.5 at 11.5K | 36–38 tok/s |
+| LocalAI's backend, llama.cpp `4c4ca5b18` plus the same fixes | **258 tok/s** at 9K tokens, 226–229 at 11.5K | 34–39 tok/s |
+| `llama-server` from the [llama.cpp fork](llama.cpp.md)'s branch tip (`821a0ad27`) | **247 tok/s** at 10K tokens, 224–229 at 11.5K | 36–39 tok/s |
 
-It is not a setting. The standalone server was also run with each of the backend's differing defaults: flash attention `auto`, `-b 512 -ub 512`, and a unified KV cache. All three gave 246–247 tok/s. Both servers use MoltenVK 1.4.2. What remains is the llama.cpp base: the backend is pinned to an older upstream commit, and its Vulkan code differs from the branch tip in semaphore handling, among other changes. For OpenCode this means about 2.5 minutes for a session's first turn instead of about 50 s. Generation, and turns that reuse the cached prompt, are unaffected. Rebuilding the backend on a newer pin is the fix. It is not done here, because `grpc-server.cpp` is written against the pinned commit ([The llama.cpp backend](#the-llamacpp-backend)).
+It was not a setting. The standalone server was run with each of the backend's differing defaults first: flash attention `auto`, `-b 512 -ub 512`, and a unified KV cache. All three gave 246–247 tok/s. Rebuilding the backend on `4c4ca5b18`, the fork branch's upstream base, with the same ten fixes ([The llama.cpp backend](#the-llamacpp-backend)) brought it level with `llama-server`. `grpc-server.cpp` compiled against it unchanged, and decisions and images gave the same results as before. For OpenCode the first turn of a session dropped from about 2.5 minutes to about a minute ([opencode.md](opencode.md#the-backend-pin)).
+
+All of these start from a cool machine. Sustained prefills throttle this laptop within a request or two, to 164–208 tok/s prefill and 16–27 tok/s generation ([opencode.md](opencode.md#heat)).
 
 **Images from the same server:** SD-Turbo q8_0, 4 steps, 512×512 — about 2 GB resident, **3.04 GB peak** (the peak is [VAE decoding](glossary.md#g-vae), not sampling), about 50 s for the first call including model load and quantization, and about 44 s after. SD 1.5 fp16 at 20 steps also works, at 88 s.
 
