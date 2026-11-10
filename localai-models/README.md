@@ -2,8 +2,11 @@
 
 LocalAI model YAML files for every model analysed in [models.md](../models.md), with context settings described below — read [the caveat on allocation ceilings](#maximum-context-measured) before trusting a wide one. Server setup: [localai.md](../localai.md).
 
+**What the install here keeps.** This is a catalogue; the LocalAI install on this machine holds only the three in bold: one coding model, one decision model and one image model. A 4 GB card serves one model at a time anyway, and the rest are a download away.
+
 | File | Model | Context | Notes |
 |---|---|---|---|
+| **`gemma-4-e2b-coding.yaml`** | Gemma-4-E2B | 64K | **The coding-agent model.** f16 KV, thinking off, one slot, for [OpenCode](../opencode.md). Picked in [Coding agents](../models.md#coding-agents). |
 | `gemma-4-e2b.yaml` | Gemma-4-E2B | 128K | Fast prefill, strong capability per gigabyte. Good default. |
 | `gemma-4-e4b.yaml` | Gemma-4-E4B | 64K | Best broad knowledge and the only 1.000 on MRCR. Slowest. Verified under load. |
 | `granite-4.0-h-micro.yaml` | Granite-4.0-H-Micro | 128K | Best tool calling. The pick for agents and unattended work. |
@@ -16,18 +19,20 @@ LocalAI model YAML files for every model analysed in [models.md](../models.md), 
 | `qwen3-4b-instruct-2507.yaml` | Qwen3-4B-Instruct-2507 | 24K | Tool-calling leader; heaviest KV cache, so the narrowest window. |
 | `qwen3.5-4b.yaml` | Qwen3.5-4B | 96K | Best maths and reasoning. A thinking model. |
 | `smollm3-3b.yaml` | SmolLM3-3B | 64K | Fully open training recipe. **No tool calls.** |
-| `kev-4b.yaml` | Kev-4B | 8K | **A decision model, not a chat model**: typed answers on `/v1/systemone`, calibrated. Needs LocalAI v4.12 and a rebuilt backend ([localai.md](../localai.md#decision-models)). |
-| `sd-turbo.yaml` | SD-Turbo | — | Everyday image generation, 4 steps |
+| **`kev-4b.yaml`** | Kev-4B | 8K | **A decision model, not a chat model**: typed answers on `/v1/systemone`, calibrated. Needs LocalAI v4.12 and a rebuilt backend ([localai.md](../localai.md#decision-models)). |
+| **`sd-turbo.yaml`** | SD-Turbo | — | Everyday image generation, 4 steps |
 | `sd-1.5.yaml` | SD 1.5 | — | Baseline, best LoRA and ControlNet ecosystem |
 | `sdxl-turbo.yaml` | SDXL-Turbo | — | Most photorealistic; at the edge of 4 GB |
 
 ## Install
 
-Copy into LocalAI's models folder — with the menu-bar app:
+Copy into LocalAI's models folder — with the menu-bar app, the three kept here:
 
 ```bash
-cp *.yaml ~/Library/Application\ Support/LocalAI/models/
+cp gemma-4-e2b-coding.yaml kev-4b.yaml sd-turbo.yaml ~/Library/Application\ Support/LocalAI/models/
 ```
+
+Or `cp *.yaml` for the whole catalogue.
 
 Restart the server from the menu-bar icon; the models appear in `/v1/models`.
 
@@ -101,7 +106,7 @@ The original chat profiles use the following settings. The LFM3 and decision pro
 | Setting | Why |
 |---|---|
 | `gpu_layers: 99` | Put every layer on the Radeon. Anything less splits the model and pays a PCIe hop per token. |
-| `flash_attention: "true"` | It runs on the GPU on these branches and is the faster option, and a quantized KV cache is impossible without it. |
+| `flash_attention: "true"` | It runs on the GPU on these branches and is the faster option, and a quantized KV cache is impossible without it. The backend accepts only `on`, `off` and `auto`, so `"true"` silently means `auto`, which resolves to on wherever it was checked. Newer configs say `"on"`. |
 | `cache_type_k`/`cache_type_v: q4_0` | About 4% slower than f16, and 3.5× more context. Avoid q8_0 unless your backend includes the q8_0 flash-attention guard. |
 | `context_size` | See the measured ceilings and starting-profile exceptions above. |
 | `f16: true` | Standard for GGUF weights here. |
@@ -127,6 +132,8 @@ Two different levels of testing sit behind these files.
 That run predates the context changes above, so its throughput figures were taken at the older, narrower settings. LFM3 also answered 20 + 34 correctly through LocalAI with a larger output budget; VRAM and sustained throughput were not measured for that request.
 
 **Decisions, run through LocalAI v4.12 end to end:** d1-2B answered a short three-question text request, and the CPU image profile answered one chart question correctly. The model-card video request is not reliable on this LocalAI build; see [the media limitation](../localai.md#lfm3-and-d1-2b). On 4 November 2026, `kev-4b` answered a three-question `/v1/systemone` request (choice, noul, score) and a `/v1/decisions` request, with every layer on the Radeon and probabilities identical to a direct `llama-server` run. Its JevBench accuracy and calibration are in [decision-models.md](../decision-models.md#results). It uses only two of the five text settings below, `gpu_layers` and `flash_attention`: no KV quantization was tested, and its context is the one it was run at, not a swept ceiling.
+
+**OpenCode through LocalAI, 10 November 2026:** `gemma-4-e2b-coding` passed 15 of 16 agent tasks (fix a planted bug; run a failing test, fix the code, rerun) with OpenCode's ~11.5K-token prompt in a 64K window, 2.17 GB resident. See [opencode.md](../opencode.md#verified).
 
 **Context fit measured with `llama-cli`, not yet run through LocalAI**: `gemma-4-e2b`, `gemma-4-e4b`, `granite-4.2-3b`, `phi-4-mini`, `smollm3-3b`. The backend and flags are identical to the four verified configs, so these are expected to work, but nothing has exercised them over the API.
 

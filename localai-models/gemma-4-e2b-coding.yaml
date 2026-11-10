@@ -1,0 +1,57 @@
+# Gemma-4-E2B for a coding agent (OpenCode) -- the coding pick on this card.
+#
+# Chosen in a seven-model bake-off (models.md#coding-agents): HumanEval+ 18/20,
+# 6/6 OpenCode end-to-end tasks head to head (Granite-4.0-H-Micro 2/6) and
+# 15/16 across all runs, the best instruction-following of the fast models (IFBench
+# strict 0.24), 0.84 BFCL tool calling, and 39.6 tok/s generation with 12K
+# tokens already in context -- the depth OpenCode's opening prompt puts it at.
+#
+# Differs from gemma-4-e2b.yaml in four ways, each measured:
+#   - f16 KV, not q4_0. At 12K depth q4_0 decodes at 22.6 tok/s, f16 at 39.6.
+#     The interleaved sliding window keeps even f16 small: 2.17 GB resident at
+#     64K with an 11.5K-token prompt.
+#   - 64K context, verified with OpenCode's real ~11.5K-token prompt plus
+#     tool turns. Raise it only after the same check.
+#   - Thinking off. OpenCode needs the answer in `content`, and a 2B model
+#     thinking at length on every tool turn costs more than it returns.
+#   - parallel:1, so one slot keeps the agent's cached prompt. Turn OpenCode's
+#     title request off as well (opencode.md#the-config), or it evicts it.
+#
+# flash_attention is "on", not "true": the backend accepts on/off/auto, and
+# "true" silently means auto. For this model both resolve to on (identical
+# prefill), but say what is meant.
+
+name: gemma-4-e2b-coding
+backend: llama-cpp
+description: Gemma 4 E2B for OpenCode (64K, f16 KV, thinking off). The coding-agent model on this card.
+
+parameters:
+  model: gemma-4-E2B-it-Q4_K_M.gguf
+  # Google's recommended sampling for Gemma 4; the end-to-end runs used it.
+  temperature: 1.0
+  top_k: 64
+  top_p: 0.95
+
+context_size: 65536
+f16: true
+gpu_layers: 99
+flash_attention: "on"
+
+chat_template_kwargs:
+  enable_thinking: false
+
+options:
+  - use_jinja:true
+  - parallel:1
+  - reasoning_budget:0
+
+template:
+  use_tokenizer_template: true
+
+function:
+  automatic_tool_parsing_fallback: true
+  grammar:
+    disable: true
+
+known_usecases:
+  - chat
