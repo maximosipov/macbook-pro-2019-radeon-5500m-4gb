@@ -95,43 +95,35 @@ open "/Applications/LocalAI M.app"
 
 The app runs in the menu bar with no Dock icon and starts the server with the MoltenVK environment set. API and web UI: `http://127.0.0.1:8085`.
 
-**2. Add a model.** Weights are not bundled. Symlink a GGUF into the models folder and add a profile; OpenCode's opening prompt alone is about 11,000 tokens, so the window must be sized for it.
-
-Gemma-4-E4B is the best all-round pick here: top MMLU-Pro (0.54), near-top tool calling (BFCL 0.85), and the only model in the set that can actually retrieve across a long window (MRCR 1.000 against 0.014 for the next-widest model). 64K is the largest context measured *under a real prompt load* — see [context ceilings](models.md#context-ceilings) before raising it.
+**2. Add the coding model.** Weights are not bundled. Gemma-4-E2B is the coding pick on this card. Of seven candidates it best combined speed and code: 15 of 16 OpenCode end-to-end tasks, against 2 of 6 for Granite-4.0-H-Micro, the other finalist; 18/20 on HumanEval+; and 39.6 tok/s generation with 12K tokens in context ([how it was chosen](models.md#coding-agents)). Put the weights and the [ready-made config](localai-models/gemma-4-e2b-coding.yaml) in the models folder:
 
 ```bash
 M=~/Library/Application\ Support/LocalAI/models
-ln -s /path/to/gemma-4-E4B-it-Q4_K_M.gguf "$M/"
-cat > "$M/gemma-coder.yaml" <<'EOF'
-name: gemma-coder
-backend: llama-cpp
-parameters:
-  model: gemma-4-E4B-it-Q4_K_M.gguf
-context_size: 65536
-f16: true
-gpu_layers: 99
-flash_attention: "true"
-cache_type_k: q4_0
-cache_type_v: q4_0
-EOF
+ln -s /path/to/gemma-4-E2B-it-Q4_K_M.gguf "$M/"    # a symlink or a copy; it must appear inside $M
+cp localai-models/gemma-4-e2b-coding.yaml "$M/"
 ```
 
-Restart the server from the menu-bar icon.
+The config serves 64K context with an f16 KV cache, thinking off and a single slot. OpenCode's opening prompt alone is about 11,500 tokens, so the small default context does not work. Each setting is explained in the file. Restart the server from the menu-bar icon.
 
-**3. Point OpenCode at it** in `~/.config/opencode/opencode.json`. The model key must match `name:` in the YAML, and `limit.context` must match `context_size`.
+**3. Point OpenCode at it** in `~/.config/opencode/opencode.json`. The model key must match `name:` in the YAML, and `limit.context` must match `context_size`:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["localai"],
+  "model": "localai/gemma-4-e2b-coding",
+  "small_model": "localai/gemma-4-e2b-coding",
+  "agent": { "title": { "disable": true } },
   "provider": {
     "localai": {
-      "npm": "@ai-sdk/openai-compatible",
       "name": "LocalAI (Radeon 5500M)",
+      "npm": "@ai-sdk/openai-compatible",
       "options": { "baseURL": "http://127.0.0.1:8085/v1" },
       "models": {
-        "gemma-coder": {
-          "name": "Gemma-4-E4B (64K, q4_0 KV)",
-          "limit": { "context": 65536, "output": 4096 }
+        "gemma-4-e2b-coding": {
+          "name": "Gemma-4-E2B (LocalAI, 64K)",
+          "tool_call": true,
+          "limit": { "context": 65536, "output": 8192 }
         }
       }
     }
@@ -140,12 +132,10 @@ Restart the server from the menu-bar icon.
 ```
 
 ```bash
-opencode run -m localai/gemma-coder "Reply with exactly the word: ready"
+opencode run "Reply with exactly the word: ready"
 ```
 
-Expect a first turn of about 3.5 minutes, while the GPU prefills OpenCode's system prompt at roughly 46 tok/s, then generation at about 22 tok/s. Both figures are measured with a loaded context and are slower than the headline numbers in [models.md](models.md#speed-and-fit), which are taken at a near-empty one.
-
-Two things to keep in mind. Gemma-4-E4B emits a reasoning preamble, so a small output budget returns an empty `content` with the text stranded in `reasoning_content` — keep `output` generous. And point OpenCode at one model and leave it there: only one model fits at a time, and because OpenCode opens a session with three parallel requests, a mid-session switch loses one of them to the eviction window. See [switching models](localai.md#troubleshooting).
+Expect the **first turn of a session to take about 2.5 minutes**: LocalAI's pinned llama.cpp backend prefills OpenCode's prompt at about 75 tok/s. Later turns usually reuse that prefill and take seconds, though about half of all tasks paid one more full prefill partway through. Generation runs at 36–38 tok/s. Turning off the title request (`agent.title.disable`) is what keeps that cached prefill. Every setting, the measurements and the troubleshooting are in [opencode.md](opencode.md).
 
 ## Shared setup
 
@@ -209,19 +199,20 @@ What each field of the ggml capability line means, and where this GPU sits among
 
 ## Models that fit in 4 GB
 
-All [Q4_K_M](glossary.md#g-quant), running fully on the GPU:
+All [Q4_K_M](glossary.md#g-quant), running fully on the GPU. The LocalAI install here keeps only the three in bold, one each for coding, decisions and images ([configs](localai-models/README.md)):
 
 | Use case | Model | Why |
 |---|---|---|
-| General chat and tool calling | **Qwen3-4B-Instruct-2507** | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 24K with q4_0. |
-| Maths and reasoning | **Qwen3.5-4B** | Best on MATH-500 (0.81) and GPQA Diamond (0.56). 34 tok/s. |
-| Broad knowledge, quality first | **Gemma-4-E4B** | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
-| Best capability per gigabyte | **Gemma-4-E2B** | Second on instruction-following and GPQA, 0.84 tool calling, 149 pp512 prefill — in 1.65 GB. |
-| Agent loops and long context | **Granite-4.0-H-Micro** | Most reliable tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
-| Speed and small footprint | **LFM2.5-2.6B** | Fastest decoder (58 tok/s), with a 1.84 GB footprint. Fits its full 128K context. |
-| LFM3 text and decisions | **LFM3-1.7B** and **d1-2B** | Q4 profiles run through LocalAI; see [LFM3](models.md#liquid-ai--lfm) and [decision models](decision-models.md). The 8K configurations are starting points. |
-| Decisions (routing, classification) | **Kev-4B** on the Radeon through LocalAI; **Kev-0.8B** on the CPU beside a GPU worker; **Jeva-4B** when accuracy matters | Typed probabilities instead of text. Kev-4B: calibrated (ECE 0.043), so thresholds work without fitting, 0.745 on JevBench, 2.3 s per decision, but it takes the card ([config](localai-models/kev-4b.yaml)). Kev-0.8B: 0.6 s, also calibrated, leaves the GPU to the worker. Jeva-4B: most accurate (0.87), CPU fp32 only, underconfident. See [decision-models.md](decision-models.md). |
-| Vision | **Qwen3-VL-4B** in ollama | 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512` |
+| **Coding agent (OpenCode)** | **Gemma-4-E2B**, f16 KV, 64K | 15 of 16 OpenCode end-to-end tasks, against 2 of 6 for Granite-4.0-H-Micro; 18/20 HumanEval+; 39.6 tok/s at 12K context. See [Coding agents](models.md#coding-agents) and [opencode.md](opencode.md). |
+| General chat and tool calling | Qwen3-4B-Instruct-2507 | Best tool-calling score (BFCL 0.88). 40 tok/s. Context is tight: about 10K tokens with f16 KV, 24K with q4_0. |
+| Maths and reasoning | Qwen3.5-4B | Best on MATH-500 (0.81) and GPQA Diamond (0.56). 34 tok/s. |
+| Broad knowledge, quality first | Gemma-4-E4B | Best MMLU-Pro here (0.54) and second on GPQA (0.49). The slowest in the set at 32 tok/s, and 3.2 GB. |
+| Best capability per gigabyte | Gemma-4-E2B | Second on instruction-following and GPQA, 0.84 tool calling, 149 pp512 prefill — in 1.65 GB. |
+| Agent loops and long context | Granite-4.0-H-Micro | Most reliable single-turn tool calling (24/24 on the custom set, BFCL 0.86). Its Mamba-2 hybrid design fits its entire 128K trained context with f16 KV, with VRAM to spare. |
+| Speed and small footprint | LFM2.5-2.6B | Fastest decoder (58 tok/s), with a 1.84 GB footprint. Fits its full 128K context. |
+| LFM3 text and decisions | LFM3-1.7B and d1-2B | Q4 profiles run through LocalAI; see [LFM3](models.md#liquid-ai--lfm) and [decision models](decision-models.md). The 8K configurations are starting points. |
+| Decisions (routing, classification) | **Kev-4B** on the Radeon through LocalAI; Kev-0.8B on the CPU beside a GPU worker; Jeva-4B when accuracy matters | Typed probabilities instead of text. Kev-4B: calibrated (ECE 0.043), so thresholds work without fitting, 0.745 on JevBench, 2.3 s per decision, but it takes the card ([config](localai-models/kev-4b.yaml)). Kev-0.8B: 0.6 s, also calibrated, leaves the GPU to the worker. Jeva-4B: most accurate (0.87), CPU fp32 only, underconfident. See [decision-models.md](decision-models.md). |
+| Vision | Qwen3-VL-4B in ollama | 32 tok/s with `OLLAMA_IMAGE_MIN_TOKENS=512` |
 | Images | **SD-Turbo** at q8_0 | 1.7 s per step in 2 GB. Use SDXL-Turbo for more photorealism. |
 
 Notes:
@@ -260,6 +251,7 @@ git submodule update --remote ggml     # move a submodule to its branch tip
 | [models.md](models.md) | Model speed, VRAM and context ceilings, capability scores, and recommendations |
 | [decision-models.md](decision-models.md) | System One decision models (Jev, Jeva, Kev, SemIf): JevBench accuracy, calibration, permutation and cache results, and runtime paths |
 | [localai-models/](localai-models/) | Ready-to-use LocalAI model YAML files for the recommended models |
+| [opencode.md](opencode.md) | OpenCode on Gemma-4-E2B through LocalAI: the config, end-to-end results, latency and troubleshooting |
 | [opencode-agents/](opencode-agents/) | OpenCode agents that route each phase of a task to the model measured best at it |
 | [benchmarking.md](benchmarking.md) | How to measure this machine, and how each benchmark was run |
 | [hardware.md](hardware.md) | The ggml capability line, and AMD GPU generations |

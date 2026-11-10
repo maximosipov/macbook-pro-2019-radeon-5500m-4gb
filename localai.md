@@ -128,9 +128,16 @@ Build `./local-ai` and both Vulkan backends first, then:
 MODELS_SEED=../localai-models contrib/macos-radeon-app/build-app.sh   # -> dist/macos-app/LocalAI-M.dmg
 ```
 
-`MODELS_SEED` points at the [model configs](localai-models/) to seed into the app; it is optional. `LOCALAI_DIR` packages builds from another LocalAI tree.
+`MODELS_SEED` points at a directory of [model configs](localai-models/) to seed into the app; it is optional. `LOCALAI_DIR` packages builds from another LocalAI tree. To seed only the three models kept here rather than the whole catalogue:
 
-The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Rebuilt on v4.12 on 4 November 2026 (109 bundled dylibs, 143 MB DMG) and checked through the app: a correct chat answer from Qwen3-4B-2507, a Kev-4B decision on `/v1/systemone`, and a recognisable SD-Turbo image, 37.6 s for the first call. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present.
+```bash
+SEED="$(mktemp -d)" && cp ../localai-models/{gemma-4-e2b-coding,kev-4b,sd-turbo}.yaml "$SEED/"
+MODELS_SEED="$SEED" contrib/macos-radeon-app/build-app.sh
+```
+
+The app seeds only while the models folder holds no YAML, that is on first run, so a model you delete stays deleted. Builds before [LocalAI#2](https://github.com/maximosipov/LocalAI/pull/2) copied every missing seed on each launch and brought deleted models back.
+
+The result is a 367 MB `.app` and a 142 MB DMG, ad-hoc signed — not notarized, so the quarantine bit must be cleared on first launch. Rebuilt on v4.12 on 4 November 2026 (109 bundled dylibs, 143 MB DMG) and checked through the app: a correct chat answer from Qwen3-4B-2507, a Kev-4B decision on `/v1/systemone`, and a recognisable SD-Turbo image, 37.6 s for the first call. Weights are not bundled; on first run the app seeds model YAML files into `~/Library/Application Support/LocalAI/models` and symlinks weights from a development checkout if present. On this machine the models folder holds the three kept models as real files, not symlinks.
 
 Installing it: [quick start](README.md#quick-start-localai-and-opencode).
 
@@ -230,33 +237,14 @@ The default `context_size: 4096` is useless for a coding agent: OpenCode's openi
 {"error":{"message":"request (11132 tokens) exceeds the available context size (4096 tokens), try increasing it"}}
 ```
 
-Use a larger window with a [quantized KV cache](glossary.md#g-kv-quant). Granite-4.0-H-Micro is the better pick: best tool calling measured here, and its [Mamba-2](glossary.md#g-ssm) recurrent state makes a wide window nearly free in VRAM.
+Use [`gemma-4-e2b-coding.yaml`](localai-models/gemma-4-e2b-coding.yaml): Gemma-4-E2B at 64K with an f16 KV cache, thinking off and one slot. It was chosen over six other models in [Coding agents](models.md#coding-agents) and is the only coding model the install here keeps. The OpenCode side, end-to-end results and latency are in [opencode.md](opencode.md).
 
-```yaml
-# ~/Library/Application Support/LocalAI/models/granite-coder.yaml
-name: granite-coder
-backend: llama-cpp
-parameters:
-  model: granite-4.0-h-micro-Q4_K_M.gguf
-context_size: 16384
-f16: true
-gpu_layers: 99
-flash_attention: "true"     # required for a quantized KV cache, and it runs on the GPU here
-cache_type_k: q4_0
-cache_type_v: q4_0
-```
+Two backend facts shape that profile:
 
-The OpenCode side of the configuration is in the [quick start](README.md#quick-start-localai-and-opencode). Measured with `opencode run` against this profile:
+- **Use an f16 KV cache for Gemma at agent depth.** With 12K tokens in context a q4_0 cache cuts Gemma-4-E2B's decode from 39.6 to 22.6 tok/s. Thanks to the sliding window, f16 still fits: 2.17 GB resident at 64K with an 11.5K-token prompt.
+- **`flash_attention` takes `on`, `off` or `auto`.** The backend ignores any other value, so the `"true"` used in older configs here silently means `auto`. For Gemma-4-E2B both resolve to on, with identical prefill.
 
-| Turn | Wall clock |
-|---|---|
-| First turn (model load plus prefill of the whole agent prompt) | **~3 min** |
-| Warm turn, one-word answer | **10.1 s** |
-| Warm turn, a real question with a few sentences of answer | **13.8 s** and **23.6 s** |
-
-The first turn is expensive and the rest are not: the agent's system prompt is [prefilled](glossary.md#g-prefill) once. Keep the server resident and the session alive.
-
-It is a 3B-class model. Asked for a one-liner counting lines across `.md` files it produced a command that counts files; asked what `-ngl` does it answered that it "disables the NVIDIA GPU library". Read what it produces.
+The first turn of a session is slow on this backend: see [Performance](#performance).
 
 ## Decision models
 
@@ -362,6 +350,15 @@ Granite-4.0-H-Micro, served from the same stack at context 8192:
 | VRAM resident during generation | **2.77 GB** of 4080 MiB, no CPU spill |
 
 The most reliable model measured here is also among the fastest served.
+
+**Prefill is three times slower than a current llama.cpp.** Gemma-4-E2B, 10,008-token prompt, same GGUF, same VRAM (2.17 GB):
+
+| Server | Prefill | Generation at 11.5K context |
+|---|---|---|
+| LocalAI's backend, llama.cpp `785322d17` plus the fixes | **79 tok/s** | 36–38 tok/s |
+| `llama-server` from the [llama.cpp fork](llama.cpp.md)'s branch tip (`821a0ad27`) | **247 tok/s** | 36–38 tok/s |
+
+It is not a setting. The standalone server was also run with each of the backend's differing defaults: flash attention `auto`, `-b 512 -ub 512`, and a unified KV cache. All three gave 246–247 tok/s. Both servers use MoltenVK 1.4.2. What remains is the llama.cpp base: the backend is pinned to an older upstream commit, and its Vulkan code differs from the branch tip in semaphore handling, among other changes. For OpenCode this means about 2.5 minutes for a session's first turn instead of about 50 s. Generation, and turns that reuse the cached prompt, are unaffected. Rebuilding the backend on a newer pin is the fix. It is not done here, because `grpc-server.cpp` is written against the pinned commit ([The llama.cpp backend](#the-llamacpp-backend)).
 
 **Images from the same server:** SD-Turbo q8_0, 4 steps, 512×512 — about 2 GB resident, **3.04 GB peak** (the peak is [VAE decoding](glossary.md#g-vae), not sampling), about 50 s for the first call including model load and quantization, and about 44 s after. SD 1.5 fp16 at 20 steps also works, at 88 s.
 

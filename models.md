@@ -9,6 +9,7 @@ Which models fit, how fast they run, how much context they hold, and how capable
 - [Capability scores](#capability-scores)
 - [Long-context retrieval](#long-context-retrieval)
 - [Choosing a model for unattended work](#choosing-a-model-for-unattended-work)
+- [Coding agents](#coding-agents)
 - [Decision models](#decision-models)
 - [Image models](#image-models)
 
@@ -430,7 +431,65 @@ Configuration:
 - **Leave gaps between GPU jobs.** Continuous sweeps are the one reproducible device-loss trigger here.
 - **Log [`ioreg`](glossary.md#g-ioreg) residency** with job output, so a silent fall back to CPU shows up as a 3× slowdown rather than a mystery.
 
-Scope: tool calling is measured single-turn only. Multi-turn state tracking, recovery after a failed call and long-horizon planning are unmeasured here, and are where 4B-class models are weakest.
+Scope: this section rests on single-turn tool calling. Multi-turn state tracking and recovery after a failed call are measured in [Coding agents](#coding-agents), and are where these models are weakest; long-horizon planning is unmeasured.
+
+## Coding agents
+
+Which model to run under [OpenCode](opencode.md) on this card. The requirement: at least 30 tok/s generation where an agent actually works, good instruction following, and tool calls that work. Seven candidates were measured in November 2026 with the method of the companion [M2 Pro repository](https://github.com/maximosipov/macbook-pro-2023-m2-pro-32gb): HumanEval+ and scripted multi-turn tool scenarios over `llama-server`, then OpenCode end to end through LocalAI for the two finalists. Scripts: [`coding-eval.sh`](scripts/coding-eval.sh), [`humaneval.py`](scripts/humaneval.py), [`multiturn.py`](scripts/multiturn.py), [`opencode-e2e.py`](scripts/opencode-e2e.py).
+
+**Gemma-4-E2B is the pick**, served as [`gemma-4-e2b-coding.yaml`](localai-models/gemma-4-e2b-coding.yaml): f16 KV, 64K context, thinking off. In the head-to-head it passed all six OpenCode tasks against Granite-4.0-H-Micro's two, and 15 of 16 across all runs. It scored 18/20 on HumanEval+. It decodes at 39.6 tok/s with 12K tokens in context, and it has the best IFBench of the fast models.
+
+### Speed where the agent works
+
+OpenCode's opening prompt is about 11.5K tokens, so speed at an empty context overstates what an agent sees. `llama-bench -ngl 99 -fa 1 -p 512 -n 128 -r 2`, at depth 0 and at depth 12288:
+
+| Model | pp512 @0 | tg128 @0 | pp512 @12K, q4_0 KV | tg128 @12K, q4_0 KV | pp512 @12K, f16 KV | tg128 @12K, f16 KV |
+|---|---|---|---|---|---|---|
+| Gemma-4-E2B | 444.9 | 49.1 | 123.8 | 22.6 | 143.8 | **39.6** |
+| Granite-4.0-H-Micro | 83.1 | 41.9 | 85.5 | 38.3 | 77.2 | 39.0 |
+| LFM2.5-2.6B | 122.2 | 56.8 | 96.7 | **45.8** | — | — |
+| Qwen3.5-4B | 60.4 | 33.2 | 50.9 | 25.9 | 62.8 | 29.2 |
+| Gemma-4-E4B | 119.3 | 30.7 | 72.3 | 24.4 | 63.7 | 4.6, spills |
+| Granite-4.2-3B | 77.8 | 43.9 | 42.6 | 17.1 | — | — |
+| Qwen3-4B-Instruct-2507 | 58.3 | 38.4 | 19.0 | 14.2 | — | — |
+
+The KV cache type matters more at depth than anywhere else in this repository. A q4_0 cache costs about 4% at an empty context ([Speed and fit](#speed-and-fit)), but **at 12K it nearly halves Gemma-4-E2B's decode**: 22.6 tok/s against 39.6 with f16. The hybrids barely notice. Granite's Mamba-2 state and LFM2.5's convolutions keep few attention layers, so they lose little at depth with either cache type. Gemma-4-E4B cannot take the f16 cache at 12K; it spills to host RAM and drops to 4.6 tok/s.
+
+Only three models clear 30 tok/s at depth: Gemma-4-E2B with f16 KV, Granite-4.0-H-Micro and LFM2.5-2.6B.
+
+### Code and multi-turn tools
+
+Thinking off, temperature 0, `llama-server --jinja`, 8K context. HumanEval+ is 20 problems: every eighth, with HumanEval/32 excluded for a broken test. Each solution must pass EvalPlus's extended tests, run under `sandbox-exec`. Multi-turn is 8 scripted conversations against tools with fixed replies, errors included. Each scenario passes or fails as a whole.
+
+| Model | HumanEval+ | Multi-turn tools | Failed scenarios | [IFBench](glossary.md#g-ifbench) strict | [BFCL](glossary.md#g-bfcl) |
+|---|---|---|---|---|---|
+| Gemma-4-E4B | **19/20** | 4/8 | recover after error, retry transient, two-step arithmetic, refuse invalid input | 0.24 | 0.85 |
+| Gemma-4-E2B | 18/20 | 4/8 | recover after error, retry transient, two-step arithmetic, refuse invalid input | 0.24 | 0.84 |
+| Qwen3-4B-Instruct-2507 | 17/20 | 5/8 | recover after error, chain a result, two-step arithmetic | 0.21 | **0.88** |
+| Qwen3.5-4B | 17/20 | 6/8 | retry transient, two-step arithmetic | **0.26** | 0.75 |
+| Granite-4.2-3B | 17/20, 1 unparsed | **7/8** | recover after error | 0.19 | 0.65 |
+| Granite-4.0-H-Micro | 16/20 | 6/8 | chain a result, two-step arithmetic | 0.19 | 0.86 |
+| LFM2.5-2.6B | 15/20 | 6/8 | two-step arithmetic, decline when no tool fits | 0.23 | 0.69 |
+
+IFBench and BFCL are from [Capability scores](#capability-scores). The two Gemma models fail the same four scenarios, all about what to do after a tool reply: retrying, correcting, or refusing to guess. Read the 4/8 as a ceiling on how much these two recover by themselves, and keep agent tasks short.
+
+### OpenCode end to end
+
+The two fast finalists with usable tool calling, each served by LocalAI and driven by `opencode run`, three runs per task, each in a fresh project:
+
+- **Task A**: `calc.py`'s `add` returns `a - b`; fix it. Passes if the file reads `a + b`.
+- **Task B**: run a failing `test_stats.py`, fix `median` for even-length lists in `stats.py` without touching the test, and rerun. Passes if the test exits 0 and is byte-identical.
+
+| Model | Task A | Task B | What went wrong |
+|---|---|---|---|
+| **Gemma-4-E2B** (f16 KV, 64K) | **3/3** | **3/3** | Nothing. Every B run read the failure, rewrote `median` correctly and reran the test to `ok`. Ten later runs of the same tasks passed 9: one B run fixed even lengths, broke odd ones, and stopped ([opencode.md](opencode.md#verified)) |
+| Granite-4.0-H-Micro (64K) | 2/3 | 0/3 | One A run invented `/path/to/calc.py`, which OpenCode rejected. Every B run ran the test, ran `stats.py`, and replied DONE without editing anything |
+
+Granite's tool calls are the most reliable measured here in single turns (24/24 on the custom set), but in OpenCode it stops after looking. Gemma-4-E2B acts on what it reads.
+
+LFM2.5-2.6B also clears the speed bar but was not taken to the end-to-end stage. It has the weakest HumanEval+ and BFCL here, and Liquid AI does not recommend its small models for agentic coding.
+
+Latency through LocalAI, and why the first turn of a session is slow on this backend, are in [opencode.md](opencode.md#verified).
 
 ## Decision models
 

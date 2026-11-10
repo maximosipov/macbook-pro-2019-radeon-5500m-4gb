@@ -1,1 +1,4 @@
 data/
+
+# The evaluation venv scripts/humaneval.py runs model code with (any venv with numpy)
+/tools/

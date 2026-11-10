@@ -2,6 +2,8 @@
 
 Four agent definitions that route work to whichever local model measured best at it. Model choice comes from [models.md](../models.md); server setup from [localai.md](../localai.md).
 
+> **Not the setup in use here.** These agents predate the [coding-agent bake-off](../models.md#coding-agents) and need five models installed. The LocalAI install on this machine now keeps one coding model, Gemma-4-E2B ([opencode.md](../opencode.md)), alongside one decision model and one image model. In OpenCode end to end, Granite-4.0-H-Micro, the primary below, passed 2 of 6 tasks against Gemma-4-E2B's 6 of 6. To use these agents, install the other configs and weights from [localai-models/](../localai-models/README.md) first.
+
 | Agent | Model | Why this model |
 |---|---|---|
 | *(primary)* | Granite-4.0-H-Micro | Most reliable tool calling measured here (BFCL 0.86, 24/24 on the custom set) and the widest window |
