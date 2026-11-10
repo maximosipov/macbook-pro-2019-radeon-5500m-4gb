@@ -135,7 +135,7 @@ The config serves 64K context with an f16 KV cache, thinking off and a single sl
 opencode run "Reply with exactly the word: ready"
 ```
 
-Expect the **first turn of a session to take about 2.5 minutes**: LocalAI's pinned llama.cpp backend prefills OpenCode's prompt at about 75 tok/s. Later turns usually reuse that prefill and take seconds, though about half of all tasks paid one more full prefill partway through. Generation runs at 36–38 tok/s. Turning off the title request (`agent.title.disable`) is what keeps that cached prefill. Every setting, the measurements and the troubleshooting are in [opencode.md](opencode.md).
+Expect the **first turn of a session to take about a minute**: LocalAI's llama.cpp backend prefills OpenCode's 11.5K-token prompt at about 225 tok/s. Later turns usually reuse that prefill and take seconds, though most tasks pay one more full prefill partway through. Generation runs at 34–39 tok/s on a cool machine; sustained work heats the laptop and slows both by about a quarter. Turning off the title request (`agent.title.disable`) is what keeps that cached prefill. Every setting, the measurements and the troubleshooting are in [opencode.md](opencode.md).
 
 ## Shared setup
 
